@@ -12,6 +12,7 @@ import Footer from './components/Footer';
 import LoadingScreen from './components/LoadingScreen';
 import HomePage from './components/HomePage';
 import WalletPage from './components/WalletPage';
+import MarketplacePage from './components/MarketplacePage';
 
 export default function App() {
   const [page, setPage] = useState('home');
@@ -82,6 +83,12 @@ export default function App() {
     setSelected(null);
   }, []);
 
+  const handleNavigate = useCallback((target) => {
+    setPage(target);
+    setSelected(null);
+    if (target !== 'wallet') setWalletAddress(null);
+  }, []);
+
   // Homepage
   if (page === 'home') {
     return <HomePage onLaunch={() => setPage('app')} />;
@@ -94,6 +101,19 @@ export default function App() {
         address={walletAddress}
         onBack={() => { setPage('app'); setWalletAddress(null); }}
         onSelectNode={handleSelect}
+      />
+    );
+  }
+
+  // Marketplace page
+  if (page === 'marketplace') {
+    return (
+      <MarketplacePage
+        onBack={() => setPage('app')}
+        onSelectNode={(node) => {
+          setSelected(node);
+          setPage('app');
+        }}
       />
     );
   }
@@ -114,6 +134,8 @@ export default function App() {
         stats={stats}
         lastUpdated={lastUpdated}
         isMobile={isMobile}
+        onNavigate={handleNavigate}
+        currentPage={page}
       />
 
       <Controls

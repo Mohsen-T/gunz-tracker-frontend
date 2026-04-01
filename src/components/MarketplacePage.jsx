@@ -1,0 +1,556 @@
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useIsMobile } from '../hooks/useIsMobile';
+import { RARITY_CONFIG, RARITY_ORDER, NODE_IMAGE_URL } from '../utils/constants';
+import { formatNum, shortenAddr, timeAgo } from '../utils/format';
+import {
+  fetchMarketplaceListings,
+  fetchMarketplaceStats,
+  fetchMarketplaceActivity,
+} from '../services/api';
+import ListingDetail from './ListingDetail';
+import CreateListing from './CreateListing';
+
+const SORT_OPTIONS = [
+  { value: 'newest', label: 'NEWEST' },
+  { value: 'oldest', label: 'OLDEST' },
+  { value: 'price_asc', label: 'PRICE LOW' },
+  { value: 'price_desc', label: 'PRICE HIGH' },
+  { value: 'hp_desc', label: 'HASHPOWER' },
+  { value: 'hexes_desc', label: 'HEXES' },
+];
+
+export default function MarketplacePage({ onBack, onSelectNode }) {
+  const isMobile = useIsMobile();
+
+  // Data state
+  const [listings, setListings] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [stats, setStats] = useState(null);
+  const [activity, setActivity] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Filter state
+  const [rarityFilter, setRarityFilter] = useState([]);
+  const [sort, setSort] = useState('newest');
+  const [minPrice, setMinPrice] = useState('');
+  const [maxPrice, setMaxPrice] = useState('');
+  const [page, setPage] = useState(0);
+  const [selectedListing, setSelectedListing] = useState(null);
+  const [showCreateListing, setShowCreateListing] = useState(false);
+  const [tab, setTab] = useState('browse'); // browse | activity
+
+  const PAGE_SIZE = 24;
+
+  // Fetch listings
+  const loadListings = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = {
+        sort,
+        limit: PAGE_SIZE,
+        offset: page * PAGE_SIZE,
+      };
+      if (rarityFilter.length === 1) params.rarity = rarityFilter[0];
+      if (minPrice) params.minPrice = minPrice;
+      if (maxPrice) params.maxPrice = maxPrice;
+      const data = await fetchMarketplaceListings(params);
+      setListings(data.listings || []);
+      setTotal(data.total || 0);
+    } catch (err) {
+      console.error('Failed to load listings:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [sort, page, rarityFilter, minPrice, maxPrice]);
+
+  useEffect(() => { loadListings(); }, [loadListings]);
+
+  // Fetch stats + activity on mount
+  useEffect(() => {
+    fetchMarketplaceStats().then(setStats).catch(() => {});
+    fetchMarketplaceActivity(30).then(setActivity).catch(() => {});
+  }, []);
+
+  // Filter locally for multi-rarity
+  const displayed = useMemo(() => {
+    if (rarityFilter.length <= 1) return listings;
+    return listings.filter(l => rarityFilter.includes(l.rarity));
+  }, [listings, rarityFilter]);
+
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+
+  const toggleRarity = (r) => {
+    setRarityFilter(prev =>
+      prev.includes(r) ? prev.filter(x => x !== r) : [...prev, r]
+    );
+    setPage(0);
+  };
+
+  const resetFilters = () => {
+    setRarityFilter([]);
+    setSort('newest');
+    setMinPrice('');
+    setMaxPrice('');
+    setPage(0);
+  };
+
+  const hasFilters = rarityFilter.length > 0 || minPrice || maxPrice || sort !== 'newest';
+
+  return (
+    <div style={{
+      width: '100vw', height: '100vh', background: '#040804', color: '#e0e0e0',
+      fontFamily: "'JetBrains Mono', 'SF Mono', monospace",
+      display: 'flex', flexDirection: 'column', overflow: 'hidden',
+    }}>
+      {/* Top Bar */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: isMobile ? '10px 12px' : '10px 20px',
+        borderBottom: '1px solid #142014', background: '#060b06', flexShrink: 0,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={onBack} style={{
+            background: 'none', border: '1px solid #1a2a1a', borderRadius: 6,
+            color: '#778', padding: '4px 10px', cursor: 'pointer', fontFamily: 'inherit',
+            fontSize: 11,
+          }}>
+            &#8592; TRACKER
+          </button>
+          <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 800, color: '#4ADE80', letterSpacing: 2 }}>
+            MARKETPLACE
+          </span>
+          <span style={{ fontSize: 9, color: '#555', padding: '1px 5px', border: '1px solid #1a2a1a', borderRadius: 4 }}>BETA</span>
+        </div>
+        <button
+          onClick={() => setShowCreateListing(true)}
+          style={{
+            background: 'linear-gradient(135deg, #4ADE80, #22c55e)',
+            color: '#000', border: 'none', borderRadius: 6,
+            padding: isMobile ? '5px 10px' : '6px 16px',
+            fontSize: isMobile ? 9 : 11, fontWeight: 800, fontFamily: 'inherit',
+            letterSpacing: 2, cursor: 'pointer',
+            boxShadow: '0 0 15px #4ADE8022',
+            transition: 'transform 0.15s',
+          }}
+          onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.03)'}
+          onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+        >
+          + LIST NODE
+        </button>
+      </div>
+
+      {/* Stats Bar */}
+      {stats && (
+        <div style={{
+          display: 'flex', gap: isMobile ? 6 : 20, padding: isMobile ? '8px 12px' : '8px 20px',
+          borderBottom: '1px solid #0d180d', background: '#050a05',
+          flexWrap: 'wrap', justifyContent: 'center', flexShrink: 0,
+        }}>
+          {[
+            { l: 'FLOOR', v: stats.floorPrice ? `${stats.floorPrice.toFixed(1)} GUN` : '—', c: '#4ADE80' },
+            { l: 'LISTED', v: stats.activeListings?.toLocaleString() || '0', c: '#60A5FA' },
+            { l: '24H VOL', v: stats.volume24h ? `${formatNum(stats.volume24h)} GUN` : '—', c: '#FBBF24' },
+            { l: '24H SALES', v: stats.sales24h?.toString() || '0', c: '#C084FC' },
+            { l: '7D VOL', v: stats.volume7d ? `${formatNum(stats.volume7d)} GUN` : '—', c: '#EF4444' },
+            { l: 'ALL-TIME VOL', v: stats.totalVolume ? `${formatNum(stats.totalVolume)} GUN` : '—', c: '#F97316' },
+          ].map((s, i) => (
+            <div key={i} style={{ textAlign: 'center', minWidth: isMobile ? 60 : 80 }}>
+              <div style={{ fontSize: isMobile ? 7 : 9, letterSpacing: 1, color: '#556' }}>{s.l}</div>
+              <div style={{ fontSize: isMobile ? 11 : 13, fontWeight: 800, color: s.c }}>{s.v}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Tab Switcher */}
+      <div style={{
+        display: 'flex', gap: 0, borderBottom: '1px solid #142014', flexShrink: 0,
+        background: '#060b06',
+      }}>
+        {['browse', 'activity'].map(t => (
+          <button key={t} onClick={() => setTab(t)} style={{
+            background: tab === t ? '#0a140a' : 'transparent',
+            border: 'none', borderBottom: tab === t ? '2px solid #4ADE80' : '2px solid transparent',
+            color: tab === t ? '#4ADE80' : '#556',
+            padding: '8px 20px', cursor: 'pointer', fontFamily: 'inherit',
+            fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase',
+          }}>
+            {t === 'browse' ? 'BROWSE' : 'ACTIVITY'}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'browse' ? (
+        <>
+          {/* Filters Bar */}
+          <div style={{
+            padding: isMobile ? '8px 12px' : '8px 20px',
+            borderBottom: '1px solid #0d180d', background: '#050a05',
+            display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', flexShrink: 0,
+          }}>
+            {/* Rarity toggles */}
+            {RARITY_ORDER.map(r => {
+              const active = rarityFilter.includes(r);
+              return (
+                <button key={r} onClick={() => toggleRarity(r)} style={{
+                  background: active ? RARITY_CONFIG[r].color + '22' : 'transparent',
+                  border: `1px solid ${active ? RARITY_CONFIG[r].color : '#1a2a1a'}`,
+                  borderRadius: 4, padding: '3px 8px', cursor: 'pointer',
+                  color: active ? RARITY_CONFIG[r].color : '#556',
+                  fontSize: 10, fontFamily: 'inherit', fontWeight: 700,
+                  letterSpacing: 1,
+                }}>
+                  {r.toUpperCase()}
+                  {stats?.floorByRarity?.[r] && (
+                    <span style={{ marginLeft: 4, fontSize: 8, opacity: 0.7 }}>
+                      ({stats.floorByRarity[r].count})
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+
+            <span style={{ color: '#333', margin: '0 4px' }}>|</span>
+
+            {/* Price range */}
+            <input
+              type="number" placeholder="Min GUN" value={minPrice}
+              onChange={e => { setMinPrice(e.target.value); setPage(0); }}
+              style={priceInputStyle}
+            />
+            <span style={{ color: '#444', fontSize: 10 }}>-</span>
+            <input
+              type="number" placeholder="Max GUN" value={maxPrice}
+              onChange={e => { setMaxPrice(e.target.value); setPage(0); }}
+              style={priceInputStyle}
+            />
+
+            <span style={{ color: '#333', margin: '0 4px' }}>|</span>
+
+            {/* Sort */}
+            <select
+              value={sort} onChange={e => { setSort(e.target.value); setPage(0); }}
+              style={{
+                background: '#0a140a', border: '1px solid #1a2a1a', borderRadius: 4,
+                color: '#aaa', padding: '3px 6px', fontSize: 10, fontFamily: 'inherit',
+                cursor: 'pointer',
+              }}
+            >
+              {SORT_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+
+            {hasFilters && (
+              <button onClick={resetFilters} style={{
+                background: '#1a0a0a', border: '1px solid #3a1a1a', borderRadius: 4,
+                color: '#EF4444', padding: '3px 8px', cursor: 'pointer',
+                fontSize: 10, fontFamily: 'inherit',
+              }}>
+                RESET
+              </button>
+            )}
+
+            <span style={{ marginLeft: 'auto', fontSize: 10, color: '#445' }}>
+              {total} listing{total !== 1 ? 's' : ''}
+            </span>
+          </div>
+
+          {/* Listings Grid */}
+          <div style={{ flex: 1, overflow: 'auto', padding: isMobile ? 8 : 16 }}>
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: 60, color: '#445' }}>
+                <div style={{ fontSize: 12, animation: 'pulse 1.5s infinite' }}>Loading listings...</div>
+              </div>
+            ) : displayed.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 60, color: '#445' }}>
+                <div style={{ fontSize: 32, marginBottom: 12 }}>No listings found</div>
+                <div style={{ fontSize: 11 }}>Try adjusting your filters</div>
+              </div>
+            ) : (
+              <>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))',
+                  gap: isMobile ? 8 : 12,
+                }}>
+                  {displayed.map(listing => (
+                    <ListingCard
+                      key={listing.listingId}
+                      listing={listing}
+                      isMobile={isMobile}
+                      onClick={() => setSelectedListing(listing)}
+                    />
+                  ))}
+                </div>
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div style={{
+                    display: 'flex', justifyContent: 'center', gap: 8,
+                    padding: '16px 0', marginTop: 8,
+                  }}>
+                    <PaginationBtn
+                      disabled={page === 0}
+                      onClick={() => setPage(p => p - 1)}
+                      label="PREV"
+                    />
+                    <span style={{ fontSize: 11, color: '#556', padding: '4px 8px' }}>
+                      {page + 1} / {totalPages}
+                    </span>
+                    <PaginationBtn
+                      disabled={page >= totalPages - 1}
+                      onClick={() => setPage(p => p + 1)}
+                      label="NEXT"
+                    />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </>
+      ) : (
+        /* Activity Tab */
+        <ActivityFeed activity={activity} isMobile={isMobile} />
+      )}
+
+      {/* Listing Detail Overlay */}
+      {selectedListing && (
+        <ListingDetail
+          listing={selectedListing}
+          onClose={() => setSelectedListing(null)}
+          onSelectNode={onSelectNode}
+          isMobile={isMobile}
+        />
+      )}
+
+      {/* Create Listing Modal */}
+      {showCreateListing && (
+        <CreateListing
+          onClose={() => setShowCreateListing(false)}
+          isMobile={isMobile}
+        />
+      )}
+
+      <style>{`
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #060b06; }
+        ::-webkit-scrollbar-thumb { background: #1a2a1a; border-radius: 2px; }
+        * { box-sizing: border-box; }
+      `}</style>
+    </div>
+  );
+}
+
+// ─── Listing Card ───
+
+function ListingCard({ listing, isMobile, onClick }) {
+  const [hovered, setHovered] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
+  const rarityColor = RARITY_CONFIG[listing.rarity]?.color || '#778';
+
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        background: hovered ? '#0c180c' : '#080f08',
+        border: `1px solid ${hovered ? rarityColor + '44' : '#142014'}`,
+        borderRadius: 8, cursor: 'pointer', overflow: 'hidden',
+        transition: 'all 0.2s',
+        transform: hovered ? 'translateY(-2px)' : 'none',
+        boxShadow: hovered ? `0 4px 20px ${rarityColor}15` : 'none',
+      }}
+    >
+      {/* Node Image */}
+      <div style={{
+        position: 'relative', width: '100%', paddingTop: '100%',
+        background: '#060b06',
+      }}>
+        {!imgLoaded && (
+          <div style={{
+            position: 'absolute', inset: 0, display: 'flex',
+            alignItems: 'center', justifyContent: 'center',
+          }}>
+            <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#0a140a', animation: 'pulse 1.5s infinite' }} />
+          </div>
+        )}
+        <img
+          src={NODE_IMAGE_URL(listing.tokenId)}
+          alt={`Node #${listing.tokenId}`}
+          onLoad={() => setImgLoaded(true)}
+          onError={() => setImgLoaded(true)}
+          style={{
+            position: 'absolute', inset: 0, width: '100%', height: '100%',
+            objectFit: 'cover', opacity: imgLoaded ? 1 : 0,
+            transition: 'opacity 0.3s',
+          }}
+        />
+        {/* Rarity Badge */}
+        <div style={{
+          position: 'absolute', top: 6, left: 6,
+          background: rarityColor + '22', border: `1px solid ${rarityColor}55`,
+          borderRadius: 4, padding: '2px 6px',
+          fontSize: 8, fontWeight: 800, color: rarityColor,
+          letterSpacing: 1, textTransform: 'uppercase',
+          backdropFilter: 'blur(4px)',
+        }}>
+          {listing.rarity}
+        </div>
+        {/* Offer count badge */}
+        {listing.offerCount > 0 && (
+          <div style={{
+            position: 'absolute', top: 6, right: 6,
+            background: '#C084FC22', border: '1px solid #C084FC55',
+            borderRadius: 4, padding: '2px 6px',
+            fontSize: 8, fontWeight: 800, color: '#C084FC',
+          }}>
+            {listing.offerCount} OFFER{listing.offerCount > 1 ? 'S' : ''}
+          </div>
+        )}
+      </div>
+
+      {/* Info */}
+      <div style={{ padding: isMobile ? '8px 8px 10px' : '10px 12px 12px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <span style={{ fontSize: isMobile ? 12 : 13, fontWeight: 800, color: '#ddd' }}>
+            #{listing.tokenId}
+          </span>
+          <span style={{ fontSize: 9, color: '#445' }}>
+            {timeAgo(listing.createdAt)}
+          </span>
+        </div>
+
+        {/* Stats row */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+          {listing.hashpower > 0 && (
+            <span style={{ fontSize: 9, color: '#667' }}>
+              HP {formatNum(listing.hashpower)}
+            </span>
+          )}
+          {listing.hexesDecoded > 0 && (
+            <span style={{ fontSize: 9, color: '#667' }}>
+              HEX {formatNum(listing.hexesDecoded)}
+            </span>
+          )}
+        </div>
+
+        {/* Price */}
+        <div style={{
+          background: '#0a180a', borderRadius: 6, padding: '6px 8px',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          border: '1px solid #142014',
+        }}>
+          <span style={{ fontSize: 8, color: '#556', letterSpacing: 1 }}>PRICE</span>
+          <span style={{ fontSize: isMobile ? 12 : 14, fontWeight: 800, color: '#4ADE80' }}>
+            {listing.price ? `${Number(listing.price).toFixed(1)} GUN` : '—'}
+          </span>
+        </div>
+
+        {/* Seller */}
+        <div style={{ fontSize: 9, color: '#445', marginTop: 6, textAlign: 'right' }}>
+          {shortenAddr(listing.seller)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Activity Feed ───
+
+function ActivityFeed({ activity, isMobile }) {
+  const typeConfig = {
+    listing: { label: 'LISTED', color: '#60A5FA', icon: '+ ' },
+    sale: { label: 'SOLD', color: '#4ADE80', icon: '$ ' },
+    cancel: { label: 'CANCELLED', color: '#EF4444', icon: 'x ' },
+  };
+
+  return (
+    <div style={{ flex: 1, overflow: 'auto', padding: isMobile ? 8 : 16 }}>
+      {activity.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 60, color: '#445', fontSize: 12 }}>
+          No marketplace activity yet
+        </div>
+      ) : (
+        <div style={{ maxWidth: 700, margin: '0 auto' }}>
+          {activity.map((a, i) => {
+            const cfg = typeConfig[a.type] || typeConfig.listing;
+            const rarityColor = RARITY_CONFIG[a.rarity]?.color || '#778';
+            return (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '10px 12px', borderBottom: '1px solid #0d180d',
+              }}>
+                {/* Type badge */}
+                <div style={{
+                  minWidth: 70, textAlign: 'center',
+                  background: cfg.color + '15', border: `1px solid ${cfg.color}33`,
+                  borderRadius: 4, padding: '3px 8px',
+                  fontSize: 9, fontWeight: 800, color: cfg.color,
+                  letterSpacing: 1,
+                }}>
+                  {cfg.label}
+                </div>
+
+                {/* Node info */}
+                <div style={{ flex: 1 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#ddd' }}>
+                    #{a.tokenId}
+                  </span>
+                  {a.rarity && (
+                    <span style={{ fontSize: 9, color: rarityColor, marginLeft: 8 }}>
+                      {a.rarity}
+                    </span>
+                  )}
+                </div>
+
+                {/* Price */}
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#4ADE80', minWidth: 80, textAlign: 'right' }}>
+                  {a.price ? `${Number(a.price).toFixed(1)} GUN` : '—'}
+                </div>
+
+                {/* Actor */}
+                <div style={{ fontSize: 9, color: '#445', minWidth: 80, textAlign: 'right' }}>
+                  {shortenAddr(a.actor)}
+                </div>
+
+                {/* Time */}
+                <div style={{ fontSize: 9, color: '#334', minWidth: 50, textAlign: 'right' }}>
+                  {timeAgo(a.timestamp)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Helpers ───
+
+function PaginationBtn({ disabled, onClick, label }) {
+  return (
+    <button
+      disabled={disabled}
+      onClick={onClick}
+      style={{
+        background: disabled ? '#060b06' : '#0a140a',
+        border: '1px solid #1a2a1a', borderRadius: 4,
+        color: disabled ? '#333' : '#778',
+        padding: '4px 12px', cursor: disabled ? 'default' : 'pointer',
+        fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: 1,
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+const priceInputStyle = {
+  background: '#0a140a', border: '1px solid #1a2a1a', borderRadius: 4,
+  color: '#aaa', padding: '3px 6px', fontSize: 10, fontFamily: 'inherit',
+  width: 70, outline: 'none',
+};

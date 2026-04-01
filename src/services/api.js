@@ -98,3 +98,49 @@ export async function fetchOwners(limit = 100, offset = 0) {
 export async function fetchHealth() {
   return request('/api/health');
 }
+
+// ─── Marketplace API ───
+
+/** Fetch marketplace listings with filters */
+export async function fetchMarketplaceListings({
+  rarity, status = 'Active', sort = 'newest',
+  minPrice, maxPrice, contract, seller,
+  limit = 24, offset = 0,
+} = {}) {
+  const params = new URLSearchParams();
+  if (rarity) params.set('rarity', rarity);
+  if (status) params.set('status', status);
+  if (sort) params.set('sort', sort);
+  if (minPrice) params.set('minPrice', minPrice);
+  if (maxPrice) params.set('maxPrice', maxPrice);
+  if (contract) params.set('contract', contract);
+  if (seller) params.set('seller', seller);
+  params.set('limit', limit);
+  params.set('offset', offset);
+  return request(`/api/marketplace/listings?${params}`);
+}
+
+/** Fetch a single marketplace listing with offers and price history */
+export async function fetchMarketplaceListing(listingId) {
+  return request(`/api/marketplace/listings/${listingId}`);
+}
+
+/** Fetch recent marketplace sales */
+export async function fetchMarketplaceSales(limit = 50, offset = 0) {
+  return request(`/api/marketplace/sales?limit=${limit}&offset=${offset}`);
+}
+
+/** Fetch marketplace-wide stats (floor, volume, etc.) */
+export async function fetchMarketplaceStats() {
+  return request('/api/marketplace/stats');
+}
+
+/** Fetch recent marketplace activity feed */
+export async function fetchMarketplaceActivity(limit = 30) {
+  return request(`/api/marketplace/activity?limit=${limit}`);
+}
+
+/** Fetch marketplace data for a specific token */
+export async function fetchTokenMarketplace(contract, tokenId) {
+  return request(`/api/marketplace/token/${contract}/${tokenId}`);
+}
