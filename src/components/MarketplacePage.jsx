@@ -1,5 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useIsMobile } from '../hooks/useIsMobile';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { RARITY_CONFIG, RARITY_ORDER, NODE_IMAGE_URL } from '../utils/constants';
 import { formatNum, shortenAddr, timeAgo } from '../utils/format';
 import {
@@ -31,9 +30,7 @@ function useDebounce(value, delay) {
   return debounced;
 }
 
-export default function MarketplacePage({ onBack, onSelectNode }) {
-  const isMobile = useIsMobile();
-
+export default function MarketplacePage({ onSelectNode, isMobile, showCreateListing, onCloseCreateListing }) {
   // Data state
   const [listings, setListings] = useState([]);
   const [total, setTotal] = useState(0);
@@ -49,7 +46,6 @@ export default function MarketplacePage({ onBack, onSelectNode }) {
   const [idSearchInput, setIdSearchInput] = useState('');
   const [page, setPage] = useState(0);
   const [selectedListing, setSelectedListing] = useState(null);
-  const [showCreateListing, setShowCreateListing] = useState(false);
   const [tab, setTab] = useState('browse');
 
   // Debounced values (only fire API after user stops typing)
@@ -130,48 +126,7 @@ export default function MarketplacePage({ onBack, onSelectNode }) {
     + (idSearchInput ? 1 : 0) + (sort !== 'newest' ? 1 : 0);
 
   return (
-    <div style={{
-      width: '100vw', height: '100vh', background: '#040804', color: '#e0e0e0',
-      fontFamily: "'JetBrains Mono', 'SF Mono', monospace",
-      display: 'flex', flexDirection: 'column', overflow: 'hidden',
-    }}>
-      {/* ── Top Bar ── */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: isMobile ? '10px 12px' : '10px 20px',
-        borderBottom: '1px solid #142014', background: '#060b06', flexShrink: 0,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={onBack} style={{
-            background: 'none', border: '1px solid #1a2a1a', borderRadius: 6,
-            color: '#778', padding: '4px 10px', cursor: 'pointer', fontFamily: 'inherit',
-            fontSize: 11,
-          }}>
-            &#8592; TRACKER
-          </button>
-          <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 800, color: '#4ADE80', letterSpacing: 2 }}>
-            MARKETPLACE
-          </span>
-          <span style={{ fontSize: 9, color: '#555', padding: '1px 5px', border: '1px solid #1a2a1a', borderRadius: 4 }}>BETA</span>
-        </div>
-        <button
-          onClick={() => setShowCreateListing(true)}
-          style={{
-            background: 'linear-gradient(135deg, #4ADE80, #22c55e)',
-            color: '#000', border: 'none', borderRadius: 6,
-            padding: isMobile ? '5px 10px' : '6px 16px',
-            fontSize: isMobile ? 9 : 11, fontWeight: 800, fontFamily: 'inherit',
-            letterSpacing: 2, cursor: 'pointer',
-            boxShadow: '0 0 15px #4ADE8022',
-            transition: 'transform 0.15s',
-          }}
-          onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.03)'}
-          onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-        >
-          + LIST NODE
-        </button>
-      </div>
-
+    <>
       {/* ── Stats Bar ── */}
       {stats && (
         <div style={{
@@ -400,22 +355,17 @@ export default function MarketplacePage({ onBack, onSelectNode }) {
       {/* Create Listing Modal */}
       {showCreateListing && (
         <CreateListing
-          onClose={() => setShowCreateListing(false)}
+          onClose={onCloseCreateListing}
           isMobile={isMobile}
         />
       )}
 
       <style>{`
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-track { background: #060b06; }
-        ::-webkit-scrollbar-thumb { background: #1a2a1a; border-radius: 2px; }
-        * { box-sizing: border-box; }
         input[type="number"]::-webkit-inner-spin-button,
         input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
       `}</style>
-    </div>
+    </>
   );
 }
 

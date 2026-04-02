@@ -29,6 +29,7 @@ export default function App() {
   const [filters, setFilters] = useState({ rarity: [], status: 'all' });
   const [view, setView] = useState('bubbles');
   const [showSidebar, setShowSidebar] = useState(false);
+  const [showCreateListing, setShowCreateListing] = useState(false);
 
   // Filter nodes
   const filtered = useMemo(() => {
@@ -86,6 +87,7 @@ export default function App() {
   const handleNavigate = useCallback((target) => {
     setPage(target);
     setSelected(null);
+    setShowCreateListing(false);
     if (target !== 'wallet') setWalletAddress(null);
   }, []);
 
@@ -105,21 +107,8 @@ export default function App() {
     );
   }
 
-  // Marketplace page
-  if (page === 'marketplace') {
-    return (
-      <MarketplacePage
-        onBack={() => setPage('app')}
-        onSelectNode={(node) => {
-          setSelected(node);
-          setPage('app');
-        }}
-      />
-    );
-  }
-
-  // Loading state
-  if (nodesLoading && nodes.length === 0) {
+  // Loading state (only block tracker, not marketplace)
+  if (page === 'app' && nodesLoading && nodes.length === 0) {
     return <LoadingScreen error={nodesError} />;
   }
 
@@ -129,6 +118,7 @@ export default function App() {
       fontFamily: "'JetBrains Mono', 'SF Mono', monospace",
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
     }}>
+      {/* Shared Header — same for tracker & marketplace */}
       <Header
         filteredCount={filtered.length}
         stats={stats}
@@ -136,67 +126,83 @@ export default function App() {
         isMobile={isMobile}
         onNavigate={handleNavigate}
         currentPage={page}
+        onListNode={() => setShowCreateListing(true)}
       />
 
-      <Controls
-        search={search}
-        onSearch={setSearch}
-        filters={filters}
-        onFilters={setFilters}
-        view={view}
-        onView={setView}
-        activityCounts={activityCounts}
-        onReset={handleReset}
-        isMobile={isMobile}
-        onToggleSidebar={() => setShowSidebar(s => !s)}
-      />
-
-      {/* Main Content */}
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
-        {/* Map / Table */}
-        <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-          {view === 'bubbles' ? (
-            <BubbleCanvas
-              nodes={filtered}
-              onSelect={handleSelect}
-              selectedId={selected?.id}
-            />
-          ) : (
-            <Leaderboard
-              nodes={filtered}
-              onSelect={handleSelect}
-              isMobile={isMobile}
-            />
-          )}
-
-          {/* Detail Panel (overlays on right side of main area) */}
-          {selected && (
-            <DetailPanel
-              node={selected}
-              onClose={() => setSelected(null)}
-              onSelect={handleSelect}
-              onOpenWallet={handleOpenWallet}
-              onFilterOwner={handleFilterOwner}
-              isMobile={isMobile}
-            />
-          )}
-        </div>
-
-        {/* Right Sidebar — hidden on mobile unless toggled */}
-        {(!isMobile || showSidebar) && (
-          <Sidebar
-            stats={stats}
-            hexes={hexes}
-            hashpower={hashpower}
-            nodes={nodes}
+      {/* Page content */}
+      {page === 'marketplace' ? (
+        <MarketplacePage
+          onSelectNode={(node) => {
+            setSelected(node);
+            setPage('app');
+          }}
+          isMobile={isMobile}
+          showCreateListing={showCreateListing}
+          onCloseCreateListing={() => setShowCreateListing(false)}
+        />
+      ) : (
+        <>
+          <Controls
+            search={search}
+            onSearch={setSearch}
+            filters={filters}
+            onFilters={setFilters}
+            view={view}
+            onView={setView}
+            activityCounts={activityCounts}
+            onReset={handleReset}
             isMobile={isMobile}
-            onClose={() => setShowSidebar(false)}
-            onSelectNode={handleSelect}
+            onToggleSidebar={() => setShowSidebar(s => !s)}
           />
-        )}
-      </div>
 
-      <Footer lastUpdated={lastUpdated} isMobile={isMobile} />
+          {/* Main Content */}
+          <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
+            {/* Map / Table */}
+            <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+              {view === 'bubbles' ? (
+                <BubbleCanvas
+                  nodes={filtered}
+                  onSelect={handleSelect}
+                  selectedId={selected?.id}
+                />
+              ) : (
+                <Leaderboard
+                  nodes={filtered}
+                  onSelect={handleSelect}
+                  isMobile={isMobile}
+                />
+              )}
+
+              {/* Detail Panel (overlays on right side of main area) */}
+              {selected && (
+                <DetailPanel
+                  node={selected}
+                  onClose={() => setSelected(null)}
+                  onSelect={handleSelect}
+                  onOpenWallet={handleOpenWallet}
+                  onFilterOwner={handleFilterOwner}
+                  isMobile={isMobile}
+                />
+              )}
+            </div>
+
+            {/* Right Sidebar — hidden on mobile unless toggled */}
+            {(!isMobile || showSidebar) && (
+              <Sidebar
+                stats={stats}
+                hexes={hexes}
+                hashpower={hashpower}
+                nodes={nodes}
+                isMobile={isMobile}
+                onClose={() => setShowSidebar(false)}
+                onSelectNode={handleSelect}
+              />
+            )}
+          </div>
+
+          <Footer lastUpdated={lastUpdated} isMobile={isMobile} />
+        </>
+      )}
 
       {/* Global styles */}
       <style>{`

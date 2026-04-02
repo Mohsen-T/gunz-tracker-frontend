@@ -1,6 +1,6 @@
 import { formatNum } from '../utils/format';
 
-export default function Header({ filteredCount, stats, lastUpdated, isMobile, onNavigate, currentPage }) {
+export default function Header({ filteredCount, stats, lastUpdated, isMobile, onNavigate, currentPage, onListNode }) {
   const totals = stats?.totals;
 
   const statItems = [
@@ -16,13 +16,15 @@ export default function Header({ filteredCount, stats, lastUpdated, isMobile, on
     { id: 'marketplace', label: 'MARKETPLACE' },
   ];
 
+  const isMarketplace = currentPage === 'marketplace';
+
   if (isMobile) {
     return (
       <div style={{
         padding: '8px 12px', borderBottom: '1px solid #142014',
         background: '#060b06', flexShrink: 0,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMarketplace ? 0 : 6 }}>
           <img src="/logo.png" alt="GRIDZILLA" style={{ height: 36 }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {navItems.map(nav => (
@@ -42,16 +44,21 @@ export default function Header({ filteredCount, stats, lastUpdated, isMobile, on
               </button>
             ))}
             <span style={{ fontSize: 9, color: '#778', padding: '1px 5px', border: '1px solid #1a2a1a', borderRadius: 4 }}>BETA</span>
+            {isMarketplace && (
+              <ListNodeButton isMobile={true} onClick={onListNode} />
+            )}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'space-between' }}>
-          {statItems.map((s, i) => (
-            <div key={i} style={{ textAlign: 'center', minWidth: 50 }}>
-              <div style={{ fontSize: 8, letterSpacing: 1, color: '#778' }}>{s.l}</div>
-              <div style={{ fontSize: 12, fontWeight: 800, color: s.c }}>{s.v}</div>
-            </div>
-          ))}
-        </div>
+        {!isMarketplace && (
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'space-between' }}>
+            {statItems.map((s, i) => (
+              <div key={i} style={{ textAlign: 'center', minWidth: 50 }}>
+                <div style={{ fontSize: 8, letterSpacing: 1, color: '#778' }}>{s.l}</div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: s.c }}>{s.v}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
@@ -96,14 +103,45 @@ export default function Header({ filteredCount, stats, lastUpdated, isMobile, on
           ))}
         </div>
       </div>
-      <div style={{ display: 'flex', gap: 28 }}>
-        {statItems.map((s, i) => (
-          <div key={i} style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 10, letterSpacing: 2, color: '#778', marginBottom: 2 }}>{s.l}</div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: s.c }}>{s.v}</div>
-          </div>
-        ))}
-      </div>
+      {isMarketplace ? (
+        <ListNodeButton isMobile={false} onClick={onListNode} />
+      ) : (
+        <div style={{ display: 'flex', gap: 28 }}>
+          {statItems.map((s, i) => (
+            <div key={i} style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 10, letterSpacing: 2, color: '#778', marginBottom: 2 }}>{s.l}</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: s.c }}>{s.v}</div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
+  );
+}
+
+function ListNodeButton({ isMobile, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        background: 'linear-gradient(135deg, #4ADE80, #22c55e)',
+        color: '#000', border: 'none', borderRadius: 6,
+        padding: isMobile ? '4px 10px' : '8px 22px',
+        fontSize: isMobile ? 9 : 12, fontWeight: 800, fontFamily: 'inherit',
+        letterSpacing: 2, cursor: 'pointer',
+        boxShadow: '0 0 20px #4ADE8022',
+        transition: 'transform 0.15s, box-shadow 0.15s',
+      }}
+      onMouseEnter={e => {
+        e.currentTarget.style.transform = 'scale(1.04)';
+        e.currentTarget.style.boxShadow = '0 0 30px #4ADE8044';
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.transform = 'scale(1)';
+        e.currentTarget.style.boxShadow = '0 0 20px #4ADE8022';
+      }}
+    >
+      + LIST NODE
+    </button>
   );
 }
