@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { RARITY_CONFIG, RARITY_ORDER, NODE_IMAGE_URL } from '../utils/constants';
 import { formatNum, shortenAddr, timeAgo } from '../utils/format';
@@ -13,11 +13,23 @@ import CreateListing from './CreateListing';
 const SORT_OPTIONS = [
   { value: 'newest', label: 'NEWEST' },
   { value: 'oldest', label: 'OLDEST' },
-  { value: 'price_asc', label: 'PRICE LOW' },
-  { value: 'price_desc', label: 'PRICE HIGH' },
+  { value: 'price_asc', label: 'PRICE: LOW → HIGH' },
+  { value: 'price_desc', label: 'PRICE: HIGH → LOW' },
+  { value: 'id_asc', label: 'ID: LOW → HIGH' },
+  { value: 'id_desc', label: 'ID: HIGH → LOW' },
   { value: 'hp_desc', label: 'HASHPOWER' },
   { value: 'hexes_desc', label: 'HEXES' },
 ];
+
+// ─── Debounce hook ───
+function useDebounce(value, delay) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
+}
 
 export default function MarketplacePage({ onBack, onSelectNode }) {
   const isMobile = useIsMobile();
@@ -29,19 +41,25 @@ export default function MarketplacePage({ onBack, onSelectNode }) {
   const [activity, setActivity] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Filter state
+  // Filter state (immediate UI)
   const [rarityFilter, setRarityFilter] = useState([]);
   const [sort, setSort] = useState('newest');
-  const [minPrice, setMinPrice] = useState('');
-  const [maxPrice, setMaxPrice] = useState('');
+  const [minPriceInput, setMinPriceInput] = useState('');
+  const [maxPriceInput, setMaxPriceInput] = useState('');
+  const [idSearchInput, setIdSearchInput] = useState('');
   const [page, setPage] = useState(0);
   const [selectedListing, setSelectedListing] = useState(null);
   const [showCreateListing, setShowCreateListing] = useState(false);
-  const [tab, setTab] = useState('browse'); // browse | activity
+  const [tab, setTab] = useState('browse');
+
+  // Debounced values (only fire API after user stops typing)
+  const debouncedIdSearch = useDebounce(idSearchInput, 350);
+  const debouncedMinPrice = useDebounce(minPriceInput, 400);
+  const debouncedMaxPrice = useDebounce(maxPriceInput, 400);
 
   const PAGE_SIZE = 24;
 
-  // Fetch listings
+  // Build server-side params from all filter state
   const loadListings = useCallback(async () => {
     setLoading(true);
     try {
@@ -50,9 +68,14 @@ export default function MarketplacePage({ onBack, onSelectNode }) {
         limit: PAGE_SIZE,
         offset: page * PAGE_SIZE,
       };
-      if (rarityFilter.length === 1) params.rarity = rarityFilter[0];
-      if (minPrice) params.minPrice = minPrice;
-      if (maxPrice) params.maxPrice = maxPrice;
+      // Multi-rarity: send comma-separated
+      if (rarityFilter.length > 0) {
+        params.rarity = rarityFilter.join(',');
+      }
+      if (debouncedMinPrice) params.minPrice = debouncedMinPrice;
+      if (debouncedMaxPrice) params.maxPrice = debouncedMaxPrice;
+      if (debouncedIdSearch) params.tokenId = debouncedIdSearch;
+
       const data = await fetchMarketplaceListings(params);
       setListings(data.listings || []);
       setTotal(data.total || 0);
@@ -61,21 +84,25 @@ export default function MarketplacePage({ onBack, onSelectNode }) {
     } finally {
       setLoading(false);
     }
-  }, [sort, page, rarityFilter, minPrice, maxPrice]);
+  }, [sort, page, rarityFilter, debouncedMinPrice, debouncedMaxPrice, debouncedIdSearch]);
 
   useEffect(() => { loadListings(); }, [loadListings]);
+
+  // Reset page when any filter changes (debounced values)
+  const prevFiltersRef = useRef('');
+  useEffect(() => {
+    const key = `${rarityFilter.join(',')}-${debouncedMinPrice}-${debouncedMaxPrice}-${debouncedIdSearch}-${sort}`;
+    if (prevFiltersRef.current && prevFiltersRef.current !== key) {
+      setPage(0);
+    }
+    prevFiltersRef.current = key;
+  }, [rarityFilter, debouncedMinPrice, debouncedMaxPrice, debouncedIdSearch, sort]);
 
   // Fetch stats + activity on mount
   useEffect(() => {
     fetchMarketplaceStats().then(setStats).catch(() => {});
     fetchMarketplaceActivity(30).then(setActivity).catch(() => {});
   }, []);
-
-  // Filter locally for multi-rarity
-  const displayed = useMemo(() => {
-    if (rarityFilter.length <= 1) return listings;
-    return listings.filter(l => rarityFilter.includes(l.rarity));
-  }, [listings, rarityFilter]);
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
@@ -89,12 +116,18 @@ export default function MarketplacePage({ onBack, onSelectNode }) {
   const resetFilters = () => {
     setRarityFilter([]);
     setSort('newest');
-    setMinPrice('');
-    setMaxPrice('');
+    setMinPriceInput('');
+    setMaxPriceInput('');
+    setIdSearchInput('');
     setPage(0);
   };
 
-  const hasFilters = rarityFilter.length > 0 || minPrice || maxPrice || sort !== 'newest';
+  const hasFilters = rarityFilter.length > 0 || minPriceInput || maxPriceInput || idSearchInput || sort !== 'newest';
+
+  // Active filter count for mobile badge
+  const activeFilterCount = rarityFilter.length
+    + (minPriceInput ? 1 : 0) + (maxPriceInput ? 1 : 0)
+    + (idSearchInput ? 1 : 0) + (sort !== 'newest' ? 1 : 0);
 
   return (
     <div style={{
@@ -102,7 +135,7 @@ export default function MarketplacePage({ onBack, onSelectNode }) {
       fontFamily: "'JetBrains Mono', 'SF Mono', monospace",
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
     }}>
-      {/* Top Bar */}
+      {/* ── Top Bar ── */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: isMobile ? '10px 12px' : '10px 20px',
@@ -139,7 +172,7 @@ export default function MarketplacePage({ onBack, onSelectNode }) {
         </button>
       </div>
 
-      {/* Stats Bar */}
+      {/* ── Stats Bar ── */}
       {stats && (
         <div style={{
           display: 'flex', gap: isMobile ? 6 : 20, padding: isMobile ? '8px 12px' : '8px 20px',
@@ -162,7 +195,7 @@ export default function MarketplacePage({ onBack, onSelectNode }) {
         </div>
       )}
 
-      {/* Tab Switcher */}
+      {/* ── Tab Switcher ── */}
       <div style={{
         display: 'flex', gap: 0, borderBottom: '1px solid #142014', flexShrink: 0,
         background: '#060b06',
@@ -182,58 +215,89 @@ export default function MarketplacePage({ onBack, onSelectNode }) {
 
       {tab === 'browse' ? (
         <>
-          {/* Filters Bar */}
+          {/* ── Filters Bar ── */}
           <div style={{
-            padding: isMobile ? '8px 12px' : '8px 20px',
+            padding: isMobile ? '8px 10px' : '8px 20px',
             borderBottom: '1px solid #0d180d', background: '#050a05',
-            display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', flexShrink: 0,
+            display: 'flex', gap: isMobile ? 5 : 8, flexWrap: 'wrap', alignItems: 'center', flexShrink: 0,
           }}>
-            {/* Rarity toggles */}
-            {RARITY_ORDER.map(r => {
-              const active = rarityFilter.includes(r);
-              return (
-                <button key={r} onClick={() => toggleRarity(r)} style={{
-                  background: active ? RARITY_CONFIG[r].color + '22' : 'transparent',
-                  border: `1px solid ${active ? RARITY_CONFIG[r].color : '#1a2a1a'}`,
-                  borderRadius: 4, padding: '3px 8px', cursor: 'pointer',
-                  color: active ? RARITY_CONFIG[r].color : '#556',
-                  fontSize: 10, fontFamily: 'inherit', fontWeight: 700,
-                  letterSpacing: 1,
-                }}>
-                  {r.toUpperCase()}
-                  {stats?.floorByRarity?.[r] && (
-                    <span style={{ marginLeft: 4, fontSize: 8, opacity: 0.7 }}>
-                      ({stats.floorByRarity[r].count})
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+            {/* ID search */}
+            <div style={{ position: 'relative' }}>
+              <input
+                type="text"
+                placeholder={isMobile ? '#ID' : 'Node #ID'}
+                value={idSearchInput}
+                onChange={e => setIdSearchInput(e.target.value.replace(/\D/g, ''))}
+                style={{
+                  ...inputStyle,
+                  width: isMobile ? 55 : 80,
+                  paddingLeft: 6,
+                  color: idSearchInput ? '#4ADE80' : '#aaa',
+                }}
+              />
+              {idSearchInput && (
+                <button
+                  onClick={() => setIdSearchInput('')}
+                  style={clearBtnStyle}
+                >x</button>
+              )}
+            </div>
 
-            <span style={{ color: '#333', margin: '0 4px' }}>|</span>
+            <Divider />
+
+            {/* Rarity toggles */}
+            <div style={{ display: 'flex', gap: isMobile ? 3 : 4, flexWrap: 'wrap' }}>
+              {RARITY_ORDER.map(r => {
+                const active = rarityFilter.includes(r);
+                const cfg = RARITY_CONFIG[r];
+                return (
+                  <button key={r} onClick={() => toggleRarity(r)} style={{
+                    background: active ? cfg.color + '22' : 'transparent',
+                    border: `1px solid ${active ? cfg.color : '#1a2a1a'}`,
+                    borderRadius: 4, padding: isMobile ? '2px 5px' : '3px 8px', cursor: 'pointer',
+                    color: active ? cfg.color : '#556',
+                    fontSize: isMobile ? 8 : 10, fontFamily: 'inherit', fontWeight: 700,
+                    letterSpacing: 1, transition: 'all 0.15s',
+                  }}>
+                    {isMobile ? r.slice(0, 3).toUpperCase() : r.toUpperCase()}
+                    {stats?.floorByRarity?.[r] && (
+                      <span style={{ marginLeft: 3, fontSize: isMobile ? 7 : 8, opacity: 0.6 }}>
+                        {stats.floorByRarity[r].count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            <Divider />
 
             {/* Price range */}
-            <input
-              type="number" placeholder="Min GUN" value={minPrice}
-              onChange={e => { setMinPrice(e.target.value); setPage(0); }}
-              style={priceInputStyle}
-            />
-            <span style={{ color: '#444', fontSize: 10 }}>-</span>
-            <input
-              type="number" placeholder="Max GUN" value={maxPrice}
-              onChange={e => { setMaxPrice(e.target.value); setPage(0); }}
-              style={priceInputStyle}
-            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 3 : 4 }}>
+              <input
+                type="number" placeholder="Min" value={minPriceInput}
+                onChange={e => setMinPriceInput(e.target.value)}
+                style={{ ...inputStyle, width: isMobile ? 48 : 65 }}
+              />
+              <span style={{ color: '#333', fontSize: 9 }}>—</span>
+              <input
+                type="number" placeholder="Max" value={maxPriceInput}
+                onChange={e => setMaxPriceInput(e.target.value)}
+                style={{ ...inputStyle, width: isMobile ? 48 : 65 }}
+              />
+              <span style={{ fontSize: 8, color: '#445', marginLeft: 1 }}>GUN</span>
+            </div>
 
-            <span style={{ color: '#333', margin: '0 4px' }}>|</span>
+            <Divider />
 
-            {/* Sort */}
+            {/* Sort dropdown */}
             <select
               value={sort} onChange={e => { setSort(e.target.value); setPage(0); }}
               style={{
                 background: '#0a140a', border: '1px solid #1a2a1a', borderRadius: 4,
-                color: '#aaa', padding: '3px 6px', fontSize: 10, fontFamily: 'inherit',
-                cursor: 'pointer',
+                color: sort !== 'newest' ? '#4ADE80' : '#aaa',
+                padding: isMobile ? '2px 4px' : '3px 6px',
+                fontSize: isMobile ? 8 : 10, fontFamily: 'inherit', cursor: 'pointer',
               }}
             >
               {SORT_OPTIONS.map(o => (
@@ -241,32 +305,32 @@ export default function MarketplacePage({ onBack, onSelectNode }) {
               ))}
             </select>
 
+            {/* Reset button */}
             {hasFilters && (
               <button onClick={resetFilters} style={{
                 background: '#1a0a0a', border: '1px solid #3a1a1a', borderRadius: 4,
-                color: '#EF4444', padding: '3px 8px', cursor: 'pointer',
-                fontSize: 10, fontFamily: 'inherit',
+                color: '#EF4444', padding: isMobile ? '2px 6px' : '3px 8px', cursor: 'pointer',
+                fontSize: isMobile ? 8 : 10, fontFamily: 'inherit', fontWeight: 700,
+                letterSpacing: 1,
               }}>
-                RESET
+                RESET{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
               </button>
             )}
 
-            <span style={{ marginLeft: 'auto', fontSize: 10, color: '#445' }}>
-              {total} listing{total !== 1 ? 's' : ''}
+            {/* Result count */}
+            <span style={{ marginLeft: 'auto', fontSize: isMobile ? 8 : 10, color: '#445' }}>
+              {loading ? '...' : `${total} listing${total !== 1 ? 's' : ''}`}
             </span>
           </div>
 
-          {/* Listings Grid */}
+          {/* ── Listings Grid ── */}
           <div style={{ flex: 1, overflow: 'auto', padding: isMobile ? 8 : 16 }}>
             {loading ? (
               <div style={{ textAlign: 'center', padding: 60, color: '#445' }}>
                 <div style={{ fontSize: 12, animation: 'pulse 1.5s infinite' }}>Loading listings...</div>
               </div>
-            ) : displayed.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 60, color: '#445' }}>
-                <div style={{ fontSize: 32, marginBottom: 12 }}>No listings found</div>
-                <div style={{ fontSize: 11 }}>Try adjusting your filters</div>
-              </div>
+            ) : listings.length === 0 ? (
+              <EmptyState hasFilters={hasFilters} onReset={resetFilters} />
             ) : (
               <>
                 <div style={{
@@ -274,7 +338,7 @@ export default function MarketplacePage({ onBack, onSelectNode }) {
                   gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))',
                   gap: isMobile ? 8 : 12,
                 }}>
-                  {displayed.map(listing => (
+                  {listings.map(listing => (
                     <ListingCard
                       key={listing.listingId}
                       listing={listing}
@@ -287,9 +351,14 @@ export default function MarketplacePage({ onBack, onSelectNode }) {
                 {/* Pagination */}
                 {totalPages > 1 && (
                   <div style={{
-                    display: 'flex', justifyContent: 'center', gap: 8,
+                    display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8,
                     padding: '16px 0', marginTop: 8,
                   }}>
+                    <PaginationBtn
+                      disabled={page === 0}
+                      onClick={() => setPage(0)}
+                      label="FIRST"
+                    />
                     <PaginationBtn
                       disabled={page === 0}
                       onClick={() => setPage(p => p - 1)}
@@ -303,6 +372,11 @@ export default function MarketplacePage({ onBack, onSelectNode }) {
                       onClick={() => setPage(p => p + 1)}
                       label="NEXT"
                     />
+                    <PaginationBtn
+                      disabled={page >= totalPages - 1}
+                      onClick={() => setPage(totalPages - 1)}
+                      label="LAST"
+                    />
                   </div>
                 )}
               </>
@@ -310,7 +384,6 @@ export default function MarketplacePage({ onBack, onSelectNode }) {
           </div>
         </>
       ) : (
-        /* Activity Tab */
         <ActivityFeed activity={activity} isMobile={isMobile} />
       )}
 
@@ -338,7 +411,32 @@ export default function MarketplacePage({ onBack, onSelectNode }) {
         ::-webkit-scrollbar-track { background: #060b06; }
         ::-webkit-scrollbar-thumb { background: #1a2a1a; border-radius: 2px; }
         * { box-sizing: border-box; }
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type="number"] { -moz-appearance: textfield; }
       `}</style>
+    </div>
+  );
+}
+
+// ─── Empty State ───
+
+function EmptyState({ hasFilters, onReset }) {
+  return (
+    <div style={{ textAlign: 'center', padding: 60, color: '#445' }}>
+      <div style={{ fontSize: 28, marginBottom: 8, opacity: 0.3 }}>No listings found</div>
+      <div style={{ fontSize: 11, marginBottom: 16 }}>
+        {hasFilters ? 'No results match your filters' : 'No active listings yet'}
+      </div>
+      {hasFilters && (
+        <button onClick={onReset} style={{
+          background: '#0a140a', border: '1px solid #1a2a1a', borderRadius: 6,
+          color: '#4ADE80', padding: '8px 20px', cursor: 'pointer',
+          fontSize: 11, fontFamily: 'inherit', fontWeight: 700, letterSpacing: 2,
+        }}>
+          CLEAR FILTERS
+        </button>
+      )}
     </div>
   );
 }
@@ -462,9 +560,9 @@ function ListingCard({ listing, isMobile, onClick }) {
 
 function ActivityFeed({ activity, isMobile }) {
   const typeConfig = {
-    listing: { label: 'LISTED', color: '#60A5FA', icon: '+ ' },
-    sale: { label: 'SOLD', color: '#4ADE80', icon: '$ ' },
-    cancel: { label: 'CANCELLED', color: '#EF4444', icon: 'x ' },
+    listing: { label: 'LISTED', color: '#60A5FA' },
+    sale: { label: 'SOLD', color: '#4ADE80' },
+    cancel: { label: 'CANCELLED', color: '#EF4444' },
   };
 
   return (
@@ -480,43 +578,32 @@ function ActivityFeed({ activity, isMobile }) {
             const rarityColor = RARITY_CONFIG[a.rarity]?.color || '#778';
             return (
               <div key={i} style={{
-                display: 'flex', alignItems: 'center', gap: 12,
+                display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12,
                 padding: '10px 12px', borderBottom: '1px solid #0d180d',
               }}>
-                {/* Type badge */}
                 <div style={{
-                  minWidth: 70, textAlign: 'center',
+                  minWidth: isMobile ? 55 : 70, textAlign: 'center',
                   background: cfg.color + '15', border: `1px solid ${cfg.color}33`,
                   borderRadius: 4, padding: '3px 8px',
-                  fontSize: 9, fontWeight: 800, color: cfg.color,
+                  fontSize: isMobile ? 7 : 9, fontWeight: 800, color: cfg.color,
                   letterSpacing: 1,
                 }}>
                   {cfg.label}
                 </div>
-
-                {/* Node info */}
                 <div style={{ flex: 1 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#ddd' }}>
-                    #{a.tokenId}
-                  </span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#ddd' }}>#{a.tokenId}</span>
                   {a.rarity && (
-                    <span style={{ fontSize: 9, color: rarityColor, marginLeft: 8 }}>
-                      {a.rarity}
-                    </span>
+                    <span style={{ fontSize: 9, color: rarityColor, marginLeft: 8 }}>{a.rarity}</span>
                   )}
                 </div>
-
-                {/* Price */}
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#4ADE80', minWidth: 80, textAlign: 'right' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#4ADE80', minWidth: isMobile ? 60 : 80, textAlign: 'right' }}>
                   {a.price ? `${Number(a.price).toFixed(1)} GUN` : '—'}
                 </div>
-
-                {/* Actor */}
-                <div style={{ fontSize: 9, color: '#445', minWidth: 80, textAlign: 'right' }}>
-                  {shortenAddr(a.actor)}
-                </div>
-
-                {/* Time */}
+                {!isMobile && (
+                  <div style={{ fontSize: 9, color: '#445', minWidth: 80, textAlign: 'right' }}>
+                    {shortenAddr(a.actor)}
+                  </div>
+                )}
                 <div style={{ fontSize: 9, color: '#334', minWidth: 50, textAlign: 'right' }}>
                   {timeAgo(a.timestamp)}
                 </div>
@@ -529,7 +616,11 @@ function ActivityFeed({ activity, isMobile }) {
   );
 }
 
-// ─── Helpers ───
+// ─── Small helpers ───
+
+function Divider() {
+  return <span style={{ color: '#1a2a1a', margin: '0 2px', fontSize: 12 }}>|</span>;
+}
 
 function PaginationBtn({ disabled, onClick, label }) {
   return (
@@ -542,6 +633,7 @@ function PaginationBtn({ disabled, onClick, label }) {
         color: disabled ? '#333' : '#778',
         padding: '4px 12px', cursor: disabled ? 'default' : 'pointer',
         fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: 1,
+        transition: 'color 0.15s',
       }}
     >
       {label}
@@ -549,8 +641,14 @@ function PaginationBtn({ disabled, onClick, label }) {
   );
 }
 
-const priceInputStyle = {
+const inputStyle = {
   background: '#0a140a', border: '1px solid #1a2a1a', borderRadius: 4,
   color: '#aaa', padding: '3px 6px', fontSize: 10, fontFamily: 'inherit',
   width: 70, outline: 'none',
+};
+
+const clearBtnStyle = {
+  position: 'absolute', right: 2, top: '50%', transform: 'translateY(-50%)',
+  background: 'none', border: 'none', color: '#556', cursor: 'pointer',
+  fontSize: 9, fontFamily: 'inherit', padding: '0 3px',
 };

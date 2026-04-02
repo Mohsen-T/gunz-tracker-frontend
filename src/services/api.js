@@ -104,7 +104,7 @@ export async function fetchHealth() {
 /** Fetch marketplace listings with filters */
 export async function fetchMarketplaceListings({
   rarity, status = 'Active', sort = 'newest',
-  minPrice, maxPrice, contract, seller,
+  minPrice, maxPrice, tokenId, contract, seller,
   limit = 24, offset = 0,
 } = {}) {
   const params = new URLSearchParams();
@@ -113,6 +113,7 @@ export async function fetchMarketplaceListings({
   if (sort) params.set('sort', sort);
   if (minPrice) params.set('minPrice', minPrice);
   if (maxPrice) params.set('maxPrice', maxPrice);
+  if (tokenId) params.set('tokenId', tokenId);
   if (contract) params.set('contract', contract);
   if (seller) params.set('seller', seller);
   params.set('limit', limit);
