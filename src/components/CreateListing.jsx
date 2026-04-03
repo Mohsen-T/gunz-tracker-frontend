@@ -222,8 +222,11 @@ export default function CreateListing({ onClose, isMobile }) {
                 <span style={{ fontSize: 14, fontWeight: 800, color: '#4ADE80' }}>GUN</span>
               </div>
 
-              <div style={{ fontSize: 9, color: '#445', marginBottom: 16 }}>
-                Platform fee: 2.5% &middot; You receive: {price ? (Number(price) * 0.975).toFixed(2) : '0.00'} GUN
+              <div style={{ fontSize: 9, color: '#445', marginBottom: 8 }}>
+                Seller fee: 3% &middot; You receive: {price ? (Number(price) * 0.97).toFixed(2) : '0.00'} GUN
+              </div>
+              <div style={{ fontSize: 9, color: '#EF444488', marginBottom: 16 }}>
+                Cancel penalty: 100 GUN &middot; NFT will be escrowed in the contract
               </div>
 
               <div style={{ display: 'flex', gap: 8 }}>
@@ -275,13 +278,31 @@ export default function CreateListing({ onClose, isMobile }) {
                   {Number(price).toFixed(2)} GUN
                 </div>
                 <div style={{ fontSize: 9, color: '#445' }}>
-                  You receive: {(Number(price) * 0.975).toFixed(2)} GUN after 2.5% fee
+                  You receive: {(Number(price) * 0.97).toFixed(2)} GUN after 3% fee
                 </div>
               </div>
 
-              <div style={{ fontSize: 9, color: '#556', marginBottom: 16, lineHeight: 1.6 }}>
-                By listing, you approve the marketplace contract to transfer your NFT when purchased.
-                You can cancel your listing at any time before it sells.
+              {/* Escrow notice */}
+              <div style={{
+                background: '#0d1a0d', border: '1px solid #1a3a1a', borderRadius: 8,
+                padding: 12, marginBottom: 12,
+              }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: '#4ADE80', letterSpacing: 1, marginBottom: 4 }}>NFT ESCROW</div>
+                <div style={{ fontSize: 9, color: '#778', lineHeight: 1.6 }}>
+                  Your NFT will be transferred into the marketplace contract and held in escrow until sold or cancelled.
+                </div>
+              </div>
+
+              {/* Cancel penalty warning */}
+              <div style={{
+                background: '#1a0d0d', border: '1px solid #3a1a1a', borderRadius: 8,
+                padding: 12, marginBottom: 16,
+              }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: '#EF4444', letterSpacing: 1, marginBottom: 4 }}>CANCEL PENALTY</div>
+                <div style={{ fontSize: 9, color: '#778', lineHeight: 1.6 }}>
+                  If you cancel this listing, a penalty of <strong style={{ color: '#EF4444' }}>100 GUN</strong> will be charged.
+                  All pending offers will be automatically refunded to bidders.
+                </div>
               </div>
 
               <div style={{ display: 'flex', gap: 8 }}>
@@ -300,7 +321,7 @@ export default function CreateListing({ onClose, isMobile }) {
                   cursor: 'pointer', letterSpacing: 2,
                   boxShadow: '0 0 20px #4ADE8033',
                 }}>
-                  APPROVE & LIST
+                  ESCROW & LIST
                 </button>
               </div>
             </div>

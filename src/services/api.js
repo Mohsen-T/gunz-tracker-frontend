@@ -141,6 +141,11 @@ export async function fetchMarketplaceActivity(limit = 30) {
   return request(`/api/marketplace/activity?limit=${limit}`);
 }
 
+/** Fetch marketplace config (penalty, min offer, fees, offer duration) */
+export async function fetchMarketplaceConfig() {
+  return request('/api/marketplace/config');
+}
+
 /** Fetch marketplace data for a specific token */
 export async function fetchTokenMarketplace(contract, tokenId) {
   return request(`/api/marketplace/token/${contract}/${tokenId}`);
