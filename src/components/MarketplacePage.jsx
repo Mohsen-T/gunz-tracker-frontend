@@ -7,7 +7,6 @@ import {
   fetchMarketplaceActivity,
 } from '../services/api';
 import ListingDetail from './ListingDetail';
-import CreateListing from './CreateListing';
 
 const SORT_OPTIONS = [
   { value: 'newest', label: 'NEWEST' },
@@ -30,7 +29,7 @@ function useDebounce(value, delay) {
   return debounced;
 }
 
-export default function MarketplacePage({ onSelectNode, isMobile, showCreateListing, onCloseCreateListing }) {
+export default function MarketplacePage({ onSelectNode, isMobile, wallet, onConnectWallet, onOpenCreateListing }) {
   // Data state
   const [listings, setListings] = useState([]);
   const [total, setTotal] = useState(0);
@@ -128,27 +127,42 @@ export default function MarketplacePage({ onSelectNode, isMobile, showCreateList
   return (
     <>
       {/* ── Stats Bar ── */}
-      {stats && (
-        <div style={{
-          display: 'flex', gap: isMobile ? 6 : 20, padding: isMobile ? '8px 12px' : '8px 20px',
-          borderBottom: '1px solid #0d180d', background: '#050a05',
-          flexWrap: 'wrap', justifyContent: 'center', flexShrink: 0,
-        }}>
-          {[
-            { l: 'FLOOR', v: stats.floorPrice ? `${stats.floorPrice.toFixed(1)} GUN` : '—', c: '#4ADE80' },
-            { l: 'LISTED', v: stats.activeListings?.toLocaleString() || '0', c: '#60A5FA' },
-            { l: '24H VOL', v: stats.volume24h ? `${formatNum(stats.volume24h)} GUN` : '—', c: '#FBBF24' },
-            { l: '24H SALES', v: stats.sales24h?.toString() || '0', c: '#C084FC' },
-            { l: '7D VOL', v: stats.volume7d ? `${formatNum(stats.volume7d)} GUN` : '—', c: '#EF4444' },
-            { l: 'ALL-TIME VOL', v: stats.totalVolume ? `${formatNum(stats.totalVolume)} GUN` : '—', c: '#F97316' },
-          ].map((s, i) => (
-            <div key={i} style={{ textAlign: 'center', minWidth: isMobile ? 60 : 80 }}>
-              <div style={{ fontSize: isMobile ? 7 : 9, letterSpacing: 1, color: '#556' }}>{s.l}</div>
-              <div style={{ fontSize: isMobile ? 11 : 13, fontWeight: 800, color: s.c }}>{s.v}</div>
-            </div>
-          ))}
-        </div>
-      )}
+      <div style={{
+        display: 'flex', gap: isMobile ? 6 : 16, padding: isMobile ? '8px 12px' : '8px 20px',
+        borderBottom: '1px solid #0d180d', background: '#050a05',
+        flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+      }}>
+        {stats && [
+          { l: 'FLOOR', v: stats.floorPrice ? `${stats.floorPrice.toFixed(1)} GUN` : '—', c: '#4ADE80' },
+          { l: 'LISTED', v: stats.activeListings?.toLocaleString() || '0', c: '#60A5FA' },
+          { l: '24H VOL', v: stats.volume24h ? `${formatNum(stats.volume24h)} GUN` : '—', c: '#FBBF24' },
+          { l: '24H SALES', v: stats.sales24h?.toString() || '0', c: '#C084FC' },
+          { l: '7D VOL', v: stats.volume7d ? `${formatNum(stats.volume7d)} GUN` : '—', c: '#EF4444' },
+          { l: 'ALL-TIME VOL', v: stats.totalVolume ? `${formatNum(stats.totalVolume)} GUN` : '—', c: '#F97316' },
+        ].map((s, i) => (
+          <div key={i} style={{ textAlign: 'center', minWidth: isMobile ? 55 : 70 }}>
+            <div style={{ fontSize: isMobile ? 7 : 9, letterSpacing: 1, color: '#556' }}>{s.l}</div>
+            <div style={{ fontSize: isMobile ? 11 : 13, fontWeight: 800, color: s.c }}>{s.v}</div>
+          </div>
+        ))}
+        {/* List for Sale button */}
+        <button
+          onClick={onOpenCreateListing}
+          style={{
+            marginLeft: isMobile ? 0 : 'auto',
+            background: wallet?.isConnected ? '#0a180a' : 'transparent',
+            border: `1px solid ${wallet?.isConnected ? '#4ADE8044' : '#1a2a1a'}`,
+            borderRadius: 6, padding: isMobile ? '4px 10px' : '6px 16px',
+            fontSize: isMobile ? 9 : 11, fontWeight: 700, fontFamily: 'inherit',
+            color: wallet?.isConnected ? '#4ADE80' : '#556',
+            cursor: 'pointer', letterSpacing: 1, transition: 'all 0.15s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = '#4ADE8066'; e.currentTarget.style.color = '#4ADE80'; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = wallet?.isConnected ? '#4ADE8044' : '#1a2a1a'; e.currentTarget.style.color = wallet?.isConnected ? '#4ADE80' : '#556'; }}
+        >
+          + LIST FOR SALE
+        </button>
+      </div>
 
       {/* ── Tab Switcher ── */}
       <div style={{
@@ -349,14 +363,8 @@ export default function MarketplacePage({ onSelectNode, isMobile, showCreateList
           onClose={() => setSelectedListing(null)}
           onSelectNode={onSelectNode}
           isMobile={isMobile}
-        />
-      )}
-
-      {/* Create Listing Modal */}
-      {showCreateListing && (
-        <CreateListing
-          onClose={onCloseCreateListing}
-          isMobile={isMobile}
+          wallet={wallet}
+          onConnectWallet={onConnectWallet}
         />
       )}
 

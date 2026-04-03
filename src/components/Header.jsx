@@ -1,6 +1,6 @@
-import { formatNum } from '../utils/format';
+import { formatNum, shortenAddr } from '../utils/format';
 
-export default function Header({ filteredCount, stats, lastUpdated, isMobile, onNavigate, currentPage, onListNode }) {
+export default function Header({ filteredCount, stats, lastUpdated, isMobile, onNavigate, currentPage, wallet, onConnectWallet }) {
   const totals = stats?.totals;
 
   const statItems = [
@@ -36,8 +36,7 @@ export default function Header({ filteredCount, stats, lastUpdated, isMobile, on
                   border: `1px solid ${currentPage === nav.id ? '#4ADE8044' : '#1a2a1a'}`,
                   borderRadius: 4, padding: '2px 6px', cursor: 'pointer',
                   color: currentPage === nav.id ? '#4ADE80' : '#556',
-                  fontSize: 8, fontWeight: 700, fontFamily: 'inherit',
-                  letterSpacing: 1,
+                  fontSize: 8, fontWeight: 700, fontFamily: 'inherit', letterSpacing: 1,
                 }}
               >
                 {nav.label}
@@ -45,7 +44,7 @@ export default function Header({ filteredCount, stats, lastUpdated, isMobile, on
             ))}
             <span style={{ fontSize: 9, color: '#778', padding: '1px 5px', border: '1px solid #1a2a1a', borderRadius: 4 }}>BETA</span>
             {isMarketplace && (
-              <ListNodeButton isMobile={true} onClick={onListNode} />
+              <WalletButton wallet={wallet} onConnect={onConnectWallet} isMobile={true} />
             )}
           </div>
         </div>
@@ -85,18 +84,8 @@ export default function Header({ filteredCount, stats, lastUpdated, isMobile, on
                 fontSize: 11, fontWeight: 700, fontFamily: 'inherit',
                 letterSpacing: 2, transition: 'all 0.15s',
               }}
-              onMouseEnter={e => {
-                if (currentPage !== nav.id) {
-                  e.currentTarget.style.color = '#aaa';
-                  e.currentTarget.style.borderColor = '#2a3a2a';
-                }
-              }}
-              onMouseLeave={e => {
-                if (currentPage !== nav.id) {
-                  e.currentTarget.style.color = '#667';
-                  e.currentTarget.style.borderColor = '#1a2a1a';
-                }
-              }}
+              onMouseEnter={e => { if (currentPage !== nav.id) { e.currentTarget.style.color = '#aaa'; e.currentTarget.style.borderColor = '#2a3a2a'; } }}
+              onMouseLeave={e => { if (currentPage !== nav.id) { e.currentTarget.style.color = '#667'; e.currentTarget.style.borderColor = '#1a2a1a'; } }}
             >
               {nav.label}
             </button>
@@ -104,7 +93,7 @@ export default function Header({ filteredCount, stats, lastUpdated, isMobile, on
         </div>
       </div>
       {isMarketplace ? (
-        <ListNodeButton isMobile={false} onClick={onListNode} />
+        <WalletButton wallet={wallet} onConnect={onConnectWallet} isMobile={false} />
       ) : (
         <div style={{ display: 'flex', gap: 28 }}>
           {statItems.map((s, i) => (
@@ -119,29 +108,48 @@ export default function Header({ filteredCount, stats, lastUpdated, isMobile, on
   );
 }
 
-function ListNodeButton({ isMobile, onClick }) {
+function WalletButton({ wallet, onConnect, isMobile }) {
+  if (wallet?.isConnected) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 8 }}>
+        {/* Green dot + address */}
+        <div
+          onClick={wallet.disconnect}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            background: '#0a180a', border: '1px solid #4ADE8033',
+            borderRadius: 8, padding: isMobile ? '3px 8px' : '6px 14px',
+            cursor: 'pointer', transition: 'border-color 0.15s',
+          }}
+          onMouseEnter={e => e.currentTarget.style.borderColor = '#EF444466'}
+          onMouseLeave={e => e.currentTarget.style.borderColor = '#4ADE8033'}
+          title="Click to disconnect"
+        >
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#4ADE80', boxShadow: '0 0 6px #4ADE80' }} />
+          <span style={{ fontSize: isMobile ? 9 : 11, fontWeight: 700, color: '#4ADE80' }}>
+            {shortenAddr(wallet.address)}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <button
-      onClick={onClick}
+      onClick={onConnect}
       style={{
         background: 'linear-gradient(135deg, #4ADE80, #22c55e)',
-        color: '#000', border: 'none', borderRadius: 6,
+        color: '#000', border: 'none', borderRadius: isMobile ? 6 : 8,
         padding: isMobile ? '4px 10px' : '8px 22px',
         fontSize: isMobile ? 9 : 12, fontWeight: 800, fontFamily: 'inherit',
         letterSpacing: 2, cursor: 'pointer',
         boxShadow: '0 0 20px #4ADE8022',
         transition: 'transform 0.15s, box-shadow 0.15s',
       }}
-      onMouseEnter={e => {
-        e.currentTarget.style.transform = 'scale(1.04)';
-        e.currentTarget.style.boxShadow = '0 0 30px #4ADE8044';
-      }}
-      onMouseLeave={e => {
-        e.currentTarget.style.transform = 'scale(1)';
-        e.currentTarget.style.boxShadow = '0 0 20px #4ADE8022';
-      }}
+      onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.04)'; e.currentTarget.style.boxShadow = '0 0 30px #4ADE8044'; }}
+      onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 0 20px #4ADE8022'; }}
     >
-      + LIST NODE
+      CONNECT WALLET
     </button>
   );
 }

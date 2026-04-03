@@ -7,7 +7,7 @@ const CANCEL_PENALTY_DEFAULT = 100;
 const MIN_OFFER_DEFAULT = 0.01;
 const OFFER_DURATION_DAYS_DEFAULT = 7;
 
-export default function ListingDetail({ listing: initialListing, onClose, onSelectNode, isMobile }) {
+export default function ListingDetail({ listing: initialListing, onClose, onSelectNode, isMobile, wallet, onConnectWallet }) {
   const [listing, setListing] = useState(initialListing);
   const [config, setConfig] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -104,7 +104,14 @@ export default function ListingDetail({ listing: initialListing, onClose, onSele
             </div>
 
             <div style={{ display: 'flex', gap: 8 }}>
-              {listing.status === 'Active' && (
+              {listing.status === 'Active' && !wallet?.isConnected && (
+                <button onClick={onConnectWallet} style={{
+                  flex: 1, background: 'linear-gradient(135deg, #4ADE80, #22c55e)',
+                  color: '#000', border: 'none', borderRadius: 8, padding: '10px 20px',
+                  fontSize: 12, fontWeight: 800, fontFamily: 'inherit', letterSpacing: 2, cursor: 'pointer',
+                }}>CONNECT WALLET TO BUY</button>
+              )}
+              {listing.status === 'Active' && wallet?.isConnected && (
                 <>
                   <button onClick={() => setShowBuyConfirm(true)} style={{
                     flex: 1, background: 'linear-gradient(135deg, #4ADE80, #22c55e)',

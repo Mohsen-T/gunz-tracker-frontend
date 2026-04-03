@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { useNodes } from './hooks/useNodes';
 import { useStats } from './hooks/useStats';
 import { useIsMobile } from './hooks/useIsMobile';
+import { useWallet } from './hooks/useWallet';
 import Header from './components/Header';
 import Controls from './components/Controls';
 import BubbleCanvas from './components/BubbleCanvas';
@@ -13,11 +14,14 @@ import LoadingScreen from './components/LoadingScreen';
 import HomePage from './components/HomePage';
 import WalletPage from './components/WalletPage';
 import MarketplacePage from './components/MarketplacePage';
+import ConnectWalletModal from './components/ConnectWalletModal';
+import CreateListing from './components/CreateListing';
 
 export default function App() {
   const [page, setPage] = useState('home');
   const [walletAddress, setWalletAddress] = useState(null);
   const isMobile = useIsMobile();
+  const wallet = useWallet();
 
   // Data hooks — fetch from backend API with 2-min polling
   const { nodes, loading: nodesLoading, error: nodesError, lastUpdated } = useNodes();
@@ -29,6 +33,7 @@ export default function App() {
   const [filters, setFilters] = useState({ rarity: [], status: 'all' });
   const [view, setView] = useState('bubbles');
   const [showSidebar, setShowSidebar] = useState(false);
+  const [showConnectWallet, setShowConnectWallet] = useState(false);
   const [showCreateListing, setShowCreateListing] = useState(false);
 
   // Filter nodes
@@ -55,7 +60,6 @@ export default function App() {
     return f;
   }, [nodes, filters, search]);
 
-  // Activity counts for control bar badges
   const activityCounts = stats?.activity || null;
 
   const handleSelect = useCallback((node) => {
@@ -91,6 +95,19 @@ export default function App() {
     if (target !== 'wallet') setWalletAddress(null);
   }, []);
 
+  const handleConnectWallet = useCallback(() => {
+    if (wallet.isConnected) {
+      // Already connected — open list flow directly
+      setShowCreateListing(true);
+    } else {
+      setShowConnectWallet(true);
+    }
+  }, [wallet.isConnected]);
+
+  const handleWalletConnected = useCallback(() => {
+    setShowConnectWallet(false);
+  }, []);
+
   // Homepage
   if (page === 'home') {
     return <HomePage onLaunch={() => setPage('app')} />;
@@ -118,7 +135,6 @@ export default function App() {
       fontFamily: "'JetBrains Mono', 'SF Mono', monospace",
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
     }}>
-      {/* Shared Header — same for tracker & marketplace */}
       <Header
         filteredCount={filtered.length}
         stats={stats}
@@ -126,19 +142,22 @@ export default function App() {
         isMobile={isMobile}
         onNavigate={handleNavigate}
         currentPage={page}
-        onListNode={() => setShowCreateListing(true)}
+        wallet={wallet}
+        onConnectWallet={handleConnectWallet}
       />
 
-      {/* Page content */}
       {page === 'marketplace' ? (
         <MarketplacePage
-          onSelectNode={(node) => {
-            setSelected(node);
-            setPage('app');
-          }}
+          onSelectNode={(node) => { setSelected(node); setPage('app'); }}
           isMobile={isMobile}
+          wallet={wallet}
+          onConnectWallet={() => setShowConnectWallet(true)}
           showCreateListing={showCreateListing}
           onCloseCreateListing={() => setShowCreateListing(false)}
+          onOpenCreateListing={() => {
+            if (wallet.isConnected) setShowCreateListing(true);
+            else setShowConnectWallet(true);
+          }}
         />
       ) : (
         <>
@@ -155,25 +174,13 @@ export default function App() {
             onToggleSidebar={() => setShowSidebar(s => !s)}
           />
 
-          {/* Main Content */}
           <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
-            {/* Map / Table */}
             <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
               {view === 'bubbles' ? (
-                <BubbleCanvas
-                  nodes={filtered}
-                  onSelect={handleSelect}
-                  selectedId={selected?.id}
-                />
+                <BubbleCanvas nodes={filtered} onSelect={handleSelect} selectedId={selected?.id} />
               ) : (
-                <Leaderboard
-                  nodes={filtered}
-                  onSelect={handleSelect}
-                  isMobile={isMobile}
-                />
+                <Leaderboard nodes={filtered} onSelect={handleSelect} isMobile={isMobile} />
               )}
-
-              {/* Detail Panel (overlays on right side of main area) */}
               {selected && (
                 <DetailPanel
                   node={selected}
@@ -185,26 +192,38 @@ export default function App() {
                 />
               )}
             </div>
-
-            {/* Right Sidebar — hidden on mobile unless toggled */}
             {(!isMobile || showSidebar) && (
               <Sidebar
-                stats={stats}
-                hexes={hexes}
-                hashpower={hashpower}
-                nodes={nodes}
+                stats={stats} hexes={hexes} hashpower={hashpower} nodes={nodes}
                 isMobile={isMobile}
                 onClose={() => setShowSidebar(false)}
                 onSelectNode={handleSelect}
               />
             )}
           </div>
-
           <Footer lastUpdated={lastUpdated} isMobile={isMobile} />
         </>
       )}
 
-      {/* Global styles */}
+      {/* Connect Wallet Modal */}
+      {showConnectWallet && (
+        <ConnectWalletModal
+          wallet={wallet}
+          isMobile={isMobile}
+          onClose={() => setShowConnectWallet(false)}
+          onConnect={handleWalletConnected}
+        />
+      )}
+
+      {/* Create Listing Modal (requires connected wallet) */}
+      {showCreateListing && wallet.isConnected && (
+        <CreateListing
+          onClose={() => setShowCreateListing(false)}
+          isMobile={isMobile}
+          walletAddress={wallet.address}
+        />
+      )}
+
       <style>{`
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
         ::-webkit-scrollbar { width: 4px; }
