@@ -65,66 +65,71 @@ export default function ProfilePage({ wallet, onClose, onSelectNode, isMobile, i
       {/* Profile banner */}
       <div style={{
         background: 'linear-gradient(135deg, #0a180a, #060b06)',
-        padding: isMobile ? '16px' : '24px 32px',
+        padding: isMobile ? '16px' : '20px 32px',
         borderBottom: '1px solid #142014',
+        position: 'relative',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? 12 : 16, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
           {/* Avatar */}
           <div style={{
-            width: isMobile ? 56 : 72, height: isMobile ? 56 : 72, borderRadius: '50%',
+            width: isMobile ? 48 : 56, height: isMobile ? 48 : 56, borderRadius: '50%', flexShrink: 0,
             background: 'linear-gradient(135deg, #4ADE80, #22c55e)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: isMobile ? 20 : 26, fontWeight: 800, color: '#000',
+            fontSize: isMobile ? 18 : 22, fontWeight: 800, color: '#000',
             border: '3px solid #142014',
           }}>
             {wallet?.address ? wallet.address.slice(2, 4).toUpperCase() : '??'}
           </div>
-          <div>
-            <div style={{ fontSize: isMobile ? 16 : 20, fontWeight: 800, color: '#ddd', marginBottom: 4 }}>
+
+          {/* Name + connected */}
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: isMobile ? 14 : 16, fontWeight: 800, color: '#ddd', marginBottom: 2 }}>
               {shortenAddr(wallet?.address)}
             </div>
-            <div style={{ fontSize: 10, color: '#4ADE80', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <div style={{ fontSize: 9, color: '#4ADE80', display: 'flex', alignItems: 'center', gap: 4 }}>
               <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#4ADE80' }} />
               Connected via {wallet?.provider || 'wallet'}
             </div>
           </div>
-          <button onClick={onClose} style={{
-            marginLeft: 'auto', background: '#0a140a', border: '1px solid #1a2a1a',
-            borderRadius: 8, color: '#556', padding: '6px 14px', fontSize: 10,
-            cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, letterSpacing: 1,
-          }}>BACK</button>
-        </div>
 
-        {/* Stats row */}
-        <div style={{ display: 'flex', gap: isMobile ? 12 : 24, flexWrap: 'wrap' }}>
-          {[
-            { l: 'NODES', v: nodes.length, c: '#4ADE80' },
-            { l: 'LISTED', v: listings.length, c: '#60A5FA' },
-            { l: 'HASHPOWER', v: formatNum(totalHP), c: '#FBBF24' },
-            { l: 'TOTAL HEXES', v: formatNum(totalHexes), c: '#C084FC' },
-            { l: 'ACTIVE', v: activeCount, c: '#4ADE80' },
-          ].map((s, i) => (
-            <div key={i}>
-              <div style={{ fontSize: 8, color: '#556', letterSpacing: 1, marginBottom: 2 }}>{s.l}</div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: s.c }}>{s.v}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* Rarity badges */}
-        {Object.keys(rarities).length > 0 && (
-          <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
+          {/* Stats — aligned right on desktop, below on mobile */}
+          <div style={{
+            display: 'flex', gap: isMobile ? 10 : 20, flexWrap: 'wrap',
+            marginLeft: isMobile ? 0 : 'auto', alignItems: 'center',
+            ...(isMobile ? { width: '100%', marginTop: 8 } : {}),
+          }}>
+            {[
+              { l: 'NODES', v: nodes.length, c: '#4ADE80' },
+              { l: 'LISTED', v: listings.length, c: '#60A5FA' },
+              { l: 'HP', v: formatNum(totalHP), c: '#FBBF24' },
+              { l: 'HEXES', v: formatNum(totalHexes), c: '#C084FC' },
+              { l: 'ACTIVE', v: activeCount, c: '#4ADE80' },
+            ].map((s, i) => (
+              <div key={i} style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 7, color: '#556', letterSpacing: 1, marginBottom: 1 }}>{s.l}</div>
+                <div style={{ fontSize: isMobile ? 13 : 15, fontWeight: 800, color: s.c }}>{s.v}</div>
+              </div>
+            ))}
+            {/* Rarity badges inline */}
             {RARITY_ORDER.filter(r => rarities[r]).map(r => (
               <span key={r} style={{
                 background: RARITY_CONFIG[r].color + '15', border: `1px solid ${RARITY_CONFIG[r].color}33`,
-                borderRadius: 4, padding: '2px 8px', fontSize: 9, fontWeight: 700,
+                borderRadius: 4, padding: '2px 6px', fontSize: 8, fontWeight: 700,
                 color: RARITY_CONFIG[r].color,
               }}>
                 {rarities[r]} {r}
               </span>
             ))}
           </div>
-        )}
+
+          {/* Back button */}
+          <button onClick={onClose} style={{
+            flexShrink: 0, background: '#0a140a', border: '1px solid #1a2a1a',
+            borderRadius: 8, color: '#556', padding: '6px 14px', fontSize: 10,
+            cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, letterSpacing: 1,
+            ...(isMobile ? { position: 'absolute', top: 16, right: 16 } : {}),
+          }}>BACK</button>
+        </div>
       </div>
 
       {/* Tabs */}

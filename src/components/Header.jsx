@@ -178,13 +178,14 @@ function ConnectedBar({ wallet, isMobile, activeOverlay, onSetOverlay }) {
         activeOverlay === 'walletPanel'
       )}
 
-      {/* GUN balance chip (desktop) */}
+      {/* GUN balance chip (desktop) — match icon button height */}
       {!isMobile && (
         <button onClick={() => toggle('walletPanel')} style={{
           background: '#0a180a', border: `1px solid ${activeOverlay === 'walletPanel' ? '#4ADE8066' : '#4ADE8033'}`,
-          borderRadius: 8, padding: '5px 12px', cursor: 'pointer',
+          borderRadius: 8, padding: '0 12px', cursor: 'pointer',
           fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 6,
           transition: 'border-color 0.15s',
+          height: 36, // match icon button height
         }}
           onMouseEnter={e => e.currentTarget.style.borderColor = '#4ADE8066'}
           onMouseLeave={e => { if (activeOverlay !== 'walletPanel') e.currentTarget.style.borderColor = '#4ADE8033'; }}

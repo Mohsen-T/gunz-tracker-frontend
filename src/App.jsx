@@ -36,26 +36,35 @@ export default function App() {
   const [showSidebar, setShowSidebar] = useState(false);
 
   /**
-   * Unified overlay state — only one overlay/dropdown open at a time.
-   * Values: null | 'notifications' | 'accountMenu' | 'walletPanel'
-   *       | 'connectWallet' | 'createListing'
-   *       | 'profile' | 'listings' | 'offers' | 'favorites' | 'settings'
+   * activeOverlay: dropdowns/modals — only one at a time.
+   * Values: null | 'notifications' | 'accountMenu' | 'walletPanel' | 'connectWallet' | 'createListing'
+   *
+   * profileView: separate from overlays so dropdowns don't close the profile page.
+   * Values: null | 'profile' | 'listings' | 'offers' | 'favorites' | 'settings'
    */
   const [activeOverlay, setActiveOverlay] = useState(null);
+  const [profileView, setProfileView] = useState(null);
 
   const closeAllOverlays = useCallback(() => setActiveOverlay(null), []);
 
+  const PROFILE_VIEWS = ['profile', 'listings', 'offers', 'favorites', 'settings'];
+
   const handleSetOverlay = useCallback((overlay) => {
-    // Close current, open new (or close if same)
+    // Profile-related targets open the profile page, not an overlay
+    if (PROFILE_VIEWS.includes(overlay)) {
+      setProfileView(overlay);
+      setActiveOverlay(null); // close any dropdown
+      return;
+    }
+    // Toggle dropdown overlay
     setActiveOverlay(prev => prev === overlay ? null : overlay);
   }, []);
 
-  // Derived overlay booleans
   const showConnectWallet = activeOverlay === 'connectWallet';
   const showCreateListing = activeOverlay === 'createListing';
   const showWalletPanel = activeOverlay === 'walletPanel';
-  const showProfilePage = ['profile', 'listings', 'offers', 'favorites', 'settings'].includes(activeOverlay);
-  const profileTab = showProfilePage ? activeOverlay : 'collected';
+  const showProfilePage = !!profileView;
+  const profileTab = profileView || 'collected';
 
   const filtered = useMemo(() => {
     let f = nodes;
@@ -76,15 +85,16 @@ export default function App() {
   const handleSelect = useCallback((node) => {
     setSelected(node);
     closeAllOverlays();
+    setProfileView(null);
     if (page === 'wallet') { setPage('app'); setWalletAddress(null); }
   }, [page, closeAllOverlays]);
 
   const handleOpenWallet = useCallback((address) => {
-    setWalletAddress(address); setPage('wallet'); setSelected(null); closeAllOverlays();
+    setWalletAddress(address); setPage('wallet'); setSelected(null); closeAllOverlays(); setProfileView(null);
   }, [closeAllOverlays]);
 
   const handleNavigate = useCallback((target) => {
-    setPage(target); setSelected(null); closeAllOverlays();
+    setPage(target); setSelected(null); closeAllOverlays(); setProfileView(null);
     if (target !== 'wallet') setWalletAddress(null);
   }, [closeAllOverlays]);
 
@@ -125,7 +135,7 @@ export default function App() {
       {showProfilePage && wallet.isConnected ? (
         <ProfilePage
           wallet={wallet} isMobile={isMobile}
-          onClose={closeAllOverlays}
+          onClose={() => setProfileView(null)}
           onSelectNode={(node) => { handleSelect(node); setPage('app'); }}
           initialTab={profileTab}
         />
@@ -174,7 +184,7 @@ export default function App() {
       {showWalletPanel && wallet.isConnected && (
         <WalletPanel wallet={wallet} isMobile={isMobile}
           onClose={closeAllOverlays}
-          onNavigateProfile={() => setActiveOverlay('profile')} />
+          onNavigateProfile={() => { setProfileView('profile'); closeAllOverlays(); }} />
       )}
 
       <style>{`
