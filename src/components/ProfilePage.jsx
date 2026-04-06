@@ -1,0 +1,327 @@
+import { useState, useEffect } from 'react';
+import { RARITY_CONFIG, RARITY_ORDER, NODE_IMAGE_URL } from '../utils/constants';
+import { formatNum, shortenAddr, timeAgo } from '../utils/format';
+import { fetchWallet, fetchMarketplaceListings, fetchWalletMarketplace } from '../services/api';
+
+/**
+ * User profile page (OpenSea-style).
+ * Shows collection, active listings, offers made, and activity.
+ */
+export default function ProfilePage({ wallet, onClose, onSelectNode, isMobile }) {
+  const [tab, setTab] = useState('collected');
+  const [nodes, setNodes] = useState([]);
+  const [listings, setListings] = useState([]);
+  const [offers, setOffers] = useState([]);
+  const [salesHistory, setSalesHistory] = useState([]);
+  const [mpStats, setMpStats] = useState(null);
+  const [walletData, setWalletData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!wallet?.address) return;
+    Promise.all([
+      fetchWallet(wallet.address).catch(() => ({ nodes: [] })),
+      fetchWalletMarketplace(wallet.address).catch(() => ({})),
+    ]).then(([wData, mData]) => {
+      setWalletData(wData);
+      setNodes(wData.nodes || []);
+      setListings(mData.activeListings || []);
+      setOffers(mData.activeOffers || []);
+      setSalesHistory(mData.salesHistory || []);
+      setMpStats(mData.stats || null);
+      setLoading(false);
+    });
+  }, [wallet?.address]);
+
+  const totalHP = walletData?.totalHashpower || 0;
+  const totalHexes = walletData?.totalHexes || 0;
+  const activeCount = walletData?.activeCount || 0;
+
+  // Rarity breakdown
+  const rarities = walletData?.rarities || {};
+
+  const tabs = [
+    { id: 'collected', label: 'Collected', count: nodes.length },
+    { id: 'listed', label: 'Listed', count: listings.length },
+    { id: 'offers', label: 'Offers Made', count: offers.length },
+    { id: 'activity', label: 'Activity', count: salesHistory.length || null },
+  ];
+
+  return (
+    <div style={{
+      flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+    }}>
+      {/* Profile banner */}
+      <div style={{
+        background: 'linear-gradient(135deg, #0a180a, #060b06)',
+        padding: isMobile ? '16px' : '24px 32px',
+        borderBottom: '1px solid #142014',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
+          {/* Avatar */}
+          <div style={{
+            width: isMobile ? 56 : 72, height: isMobile ? 56 : 72, borderRadius: '50%',
+            background: 'linear-gradient(135deg, #4ADE80, #22c55e)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: isMobile ? 20 : 26, fontWeight: 800, color: '#000',
+            border: '3px solid #142014',
+          }}>
+            {wallet?.address ? wallet.address.slice(2, 4).toUpperCase() : '??'}
+          </div>
+          <div>
+            <div style={{ fontSize: isMobile ? 16 : 20, fontWeight: 800, color: '#ddd', marginBottom: 4 }}>
+              {shortenAddr(wallet?.address)}
+            </div>
+            <div style={{ fontSize: 10, color: '#4ADE80', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#4ADE80' }} />
+              Connected via {wallet?.provider || 'wallet'}
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            marginLeft: 'auto', background: '#0a140a', border: '1px solid #1a2a1a',
+            borderRadius: 8, color: '#556', padding: '6px 14px', fontSize: 10,
+            cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, letterSpacing: 1,
+          }}>BACK</button>
+        </div>
+
+        {/* Stats row */}
+        <div style={{ display: 'flex', gap: isMobile ? 12 : 24, flexWrap: 'wrap' }}>
+          {[
+            { l: 'NODES', v: nodes.length, c: '#4ADE80' },
+            { l: 'LISTED', v: listings.length, c: '#60A5FA' },
+            { l: 'HASHPOWER', v: formatNum(totalHP), c: '#FBBF24' },
+            { l: 'TOTAL HEXES', v: formatNum(totalHexes), c: '#C084FC' },
+            { l: 'ACTIVE', v: activeCount, c: '#4ADE80' },
+          ].map((s, i) => (
+            <div key={i}>
+              <div style={{ fontSize: 8, color: '#556', letterSpacing: 1, marginBottom: 2 }}>{s.l}</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: s.c }}>{s.v}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Rarity badges */}
+        {Object.keys(rarities).length > 0 && (
+          <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
+            {RARITY_ORDER.filter(r => rarities[r]).map(r => (
+              <span key={r} style={{
+                background: RARITY_CONFIG[r].color + '15', border: `1px solid ${RARITY_CONFIG[r].color}33`,
+                borderRadius: 4, padding: '2px 8px', fontSize: 9, fontWeight: 700,
+                color: RARITY_CONFIG[r].color,
+              }}>
+                {rarities[r]} {r}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display: 'flex', borderBottom: '1px solid #142014', flexShrink: 0, background: '#060b06' }}>
+        {tabs.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{
+            background: 'none', border: 'none',
+            borderBottom: tab === t.id ? '2px solid #4ADE80' : '2px solid transparent',
+            color: tab === t.id ? '#4ADE80' : '#556',
+            padding: '10px 20px', cursor: 'pointer', fontFamily: 'inherit',
+            fontSize: 11, fontWeight: 700, letterSpacing: 2,
+          }}>
+            {t.label}{t.count != null ? ` (${t.count})` : ''}
+          </button>
+        ))}
+      </div>
+
+      {/* Content */}
+      <div style={{ flex: 1, overflow: 'auto', padding: isMobile ? 12 : 20 }}>
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: 60, color: '#445', fontSize: 11, animation: 'pulse 1.5s infinite' }}>
+            Loading...
+          </div>
+        ) : tab === 'collected' ? (
+          <CollectedGrid nodes={nodes} isMobile={isMobile} onSelect={onSelectNode} />
+        ) : tab === 'listed' ? (
+          <ListedGrid listings={listings} isMobile={isMobile} />
+        ) : tab === 'offers' ? (
+          <OffersTab offers={offers} wallet={wallet} />
+        ) : (
+          <ActivityTab salesHistory={salesHistory} wallet={wallet} mpStats={mpStats} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CollectedGrid({ nodes, isMobile, onSelect }) {
+  if (nodes.length === 0) {
+    return <EmptyState text="No NFTs in this wallet" />;
+  }
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(160px, 1fr))',
+      gap: isMobile ? 8 : 10,
+    }}>
+      {nodes.map(node => {
+        const rc = RARITY_CONFIG[node.rarity]?.color || '#778';
+        return (
+          <div key={node.id} onClick={() => onSelect?.(node)} style={{
+            background: '#0a140a', borderRadius: 10, overflow: 'hidden',
+            border: '1px solid #142014', cursor: 'pointer', transition: 'all 0.15s',
+          }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = rc + '44'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = '#142014'; e.currentTarget.style.transform = 'none'; }}
+          >
+            <div style={{ position: 'relative', paddingTop: '100%', background: '#060b06' }}>
+              <img src={NODE_IMAGE_URL(node.id)} alt={`#${node.id}`}
+                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+              <div style={{
+                position: 'absolute', top: 4, left: 4, background: rc + '22',
+                border: `1px solid ${rc}44`, borderRadius: 4, padding: '1px 5px',
+                fontSize: 7, fontWeight: 800, color: rc, letterSpacing: 1,
+              }}>{node.rarity?.toUpperCase()}</div>
+              <div style={{
+                position: 'absolute', bottom: 4, right: 4,
+                width: 8, height: 8, borderRadius: '50%',
+                background: node.activity === 'Active' ? '#4ADE80' : '#EF4444',
+              }} />
+            </div>
+            <div style={{ padding: '6px 8px' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#ddd' }}>#{node.id}</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
+                <span style={{ fontSize: 8, color: '#556' }}>HP {formatNum(node.hashpower)}</span>
+                <span style={{ fontSize: 8, color: '#556' }}>HEX {formatNum(node.hexesDecoded)}</span>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ListedGrid({ listings, isMobile }) {
+  if (listings.length === 0) {
+    return <EmptyState text="No active listings" />;
+  }
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(180px, 1fr))',
+      gap: isMobile ? 8 : 10,
+    }}>
+      {listings.map(l => {
+        const rc = RARITY_CONFIG[l.rarity]?.color || '#778';
+        return (
+          <div key={l.listingId} style={{
+            background: '#0a140a', borderRadius: 10, overflow: 'hidden',
+            border: '1px solid #142014',
+          }}>
+            <div style={{ position: 'relative', paddingTop: '80%', background: '#060b06' }}>
+              <img src={NODE_IMAGE_URL(l.tokenId)} alt={`#${l.tokenId}`}
+                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+              <div style={{
+                position: 'absolute', top: 4, left: 4, background: '#4ADE8022',
+                border: '1px solid #4ADE8044', borderRadius: 4, padding: '1px 5px',
+                fontSize: 7, fontWeight: 800, color: '#4ADE80', letterSpacing: 1,
+              }}>LISTED</div>
+            </div>
+            <div style={{ padding: '8px 10px' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#ddd', marginBottom: 2 }}>#{l.tokenId}</div>
+              <div style={{ fontSize: 9, color: rc, marginBottom: 4 }}>{l.rarity}</div>
+              <div style={{
+                background: '#060b06', borderRadius: 6, padding: '4px 6px',
+                display: 'flex', justifyContent: 'space-between',
+              }}>
+                <span style={{ fontSize: 8, color: '#556' }}>PRICE</span>
+                <span style={{ fontSize: 11, fontWeight: 800, color: '#4ADE80' }}>
+                  {Number(l.price).toFixed(1)} GUN
+                </span>
+              </div>
+              <div style={{ fontSize: 8, color: '#334', marginTop: 4 }}>Listed {timeAgo(l.createdAt)}</div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function OffersTab({ offers, wallet }) {
+  if (offers.length === 0) return <EmptyState text="No active offers" />;
+  return (
+    <div style={{ maxWidth: 600 }}>
+      {offers.map((o, i) => {
+        const rc = RARITY_CONFIG[o.rarity]?.color || '#778';
+        const expired = o.expiresAt && new Date(o.expiresAt) < new Date();
+        return (
+          <div key={i} style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '10px 0', borderBottom: '1px solid #0d180d',
+            opacity: expired ? 0.5 : 1,
+          }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#ddd', minWidth: 60 }}>#{o.tokenId}</div>
+            <span style={{ fontSize: 9, color: rc }}>{o.rarity}</span>
+            <div style={{ flex: 1 }} />
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#60A5FA' }}>{Number(o.amount).toFixed(2)} GUN</span>
+            <span style={{ fontSize: 9, color: expired ? '#EF4444' : '#334', minWidth: 60, textAlign: 'right' }}>
+              {expired ? 'EXPIRED' : timeAgo(o.createdAt)}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ActivityTab({ salesHistory, wallet, mpStats }) {
+  if (!salesHistory || salesHistory.length === 0) {
+    return (
+      <div>
+        {mpStats && (
+          <div style={{ display: 'flex', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
+            <div><div style={{ fontSize: 8, color: '#445', letterSpacing: 1 }}>SOLD</div><div style={{ fontSize: 16, fontWeight: 800, color: '#4ADE80' }}>{mpStats.totalSold}</div></div>
+            <div><div style={{ fontSize: 8, color: '#445', letterSpacing: 1 }}>SOLD VOL</div><div style={{ fontSize: 16, fontWeight: 800, color: '#4ADE80' }}>{formatNum(mpStats.soldVolume)} GUN</div></div>
+            <div><div style={{ fontSize: 8, color: '#445', letterSpacing: 1 }}>BOUGHT</div><div style={{ fontSize: 16, fontWeight: 800, color: '#60A5FA' }}>{mpStats.totalBought}</div></div>
+            <div><div style={{ fontSize: 8, color: '#445', letterSpacing: 1 }}>BOUGHT VOL</div><div style={{ fontSize: 16, fontWeight: 800, color: '#60A5FA' }}>{formatNum(mpStats.boughtVolume)} GUN</div></div>
+          </div>
+        )}
+        <EmptyState text="No marketplace activity yet" />
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ maxWidth: 600 }}>
+      {mpStats && (
+        <div style={{ display: 'flex', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
+          <div><div style={{ fontSize: 8, color: '#445', letterSpacing: 1 }}>SOLD</div><div style={{ fontSize: 16, fontWeight: 800, color: '#4ADE80' }}>{mpStats.totalSold}</div></div>
+          <div><div style={{ fontSize: 8, color: '#445', letterSpacing: 1 }}>SOLD VOL</div><div style={{ fontSize: 16, fontWeight: 800, color: '#4ADE80' }}>{formatNum(mpStats.soldVolume)} GUN</div></div>
+          <div><div style={{ fontSize: 8, color: '#445', letterSpacing: 1 }}>BOUGHT</div><div style={{ fontSize: 16, fontWeight: 800, color: '#60A5FA' }}>{mpStats.totalBought}</div></div>
+          <div><div style={{ fontSize: 8, color: '#445', letterSpacing: 1 }}>BOUGHT VOL</div><div style={{ fontSize: 16, fontWeight: 800, color: '#60A5FA' }}>{formatNum(mpStats.boughtVolume)} GUN</div></div>
+        </div>
+      )}
+      {salesHistory.map((s, i) => {
+        const isSeller = wallet?.address?.toLowerCase() === s.seller?.toLowerCase();
+        return (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid #0d180d' }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: isSeller ? '#4ADE80' : '#60A5FA', flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
+              <span style={{ fontSize: 11, color: '#aaa' }}>{isSeller ? 'Sold' : 'Bought'} Node #{s.tokenId}</span>
+            </div>
+            <span style={{ fontSize: 12, fontWeight: 700, color: isSeller ? '#4ADE80' : '#60A5FA' }}>{Number(s.price).toFixed(2)} GUN</span>
+            <span style={{ fontSize: 9, color: '#334' }}>{timeAgo(s.soldAt)}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function EmptyState({ text }) {
+  return (
+    <div style={{ textAlign: 'center', padding: 60, color: '#445' }}>
+      <div style={{ fontSize: 28, opacity: 0.2, marginBottom: 8 }}>Empty</div>
+      <div style={{ fontSize: 11 }}>{text}</div>
+    </div>
+  );
+}

@@ -16,6 +16,8 @@ import WalletPage from './components/WalletPage';
 import MarketplacePage from './components/MarketplacePage';
 import ConnectWalletModal from './components/ConnectWalletModal';
 import CreateListing from './components/CreateListing';
+import WalletPanel from './components/WalletPanel';
+import ProfilePage from './components/ProfilePage';
 
 export default function App() {
   const [page, setPage] = useState('home');
@@ -23,9 +25,8 @@ export default function App() {
   const isMobile = useIsMobile();
   const wallet = useWallet();
 
-  // Data hooks — fetch from backend API with 2-min polling
   const { nodes, loading: nodesLoading, error: nodesError, lastUpdated } = useNodes();
-  const { stats, hexes, hashpower, loading: statsLoading } = useStats();
+  const { stats, hexes, hashpower } = useStats();
 
   // UI state
   const [selected, setSelected] = useState(null);
@@ -33,28 +34,24 @@ export default function App() {
   const [filters, setFilters] = useState({ rarity: [], status: 'all' });
   const [view, setView] = useState('bubbles');
   const [showSidebar, setShowSidebar] = useState(false);
+
+  // Modal/panel state
   const [showConnectWallet, setShowConnectWallet] = useState(false);
   const [showCreateListing, setShowCreateListing] = useState(false);
+  const [showWalletPanel, setShowWalletPanel] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
 
-  // Filter nodes
   const filtered = useMemo(() => {
     let f = nodes;
-    if (filters.rarity.length > 0) {
-      f = f.filter(n => filters.rarity.includes(n.rarity));
-    }
-    if (filters.status !== 'all') {
-      f = f.filter(n => n.activity === filters.status);
-    }
+    if (filters.rarity.length > 0) f = f.filter(n => filters.rarity.includes(n.rarity));
+    if (filters.status !== 'all') f = f.filter(n => n.activity === filters.status);
     if (search) {
       const q = search.toLowerCase();
       const isNumeric = /^\d+$/.test(q);
       f = f.filter(n => {
         const sid = String(n.id);
-        if (isNumeric) {
-          return sid === q || sid.startsWith(q);
-        }
-        return sid.includes(q) ||
-          (n.hackerWalletAddress && n.hackerWalletAddress.toLowerCase().includes(q));
+        if (isNumeric) return sid === q || sid.startsWith(q);
+        return sid.includes(q) || (n.hackerWalletAddress && n.hackerWalletAddress.toLowerCase().includes(q));
       });
     }
     return f;
@@ -64,56 +61,34 @@ export default function App() {
 
   const handleSelect = useCallback((node) => {
     setSelected(node);
-    if (page === 'wallet') {
-      setPage('app');
-      setWalletAddress(null);
-    }
+    setShowProfile(false);
+    if (page === 'wallet') { setPage('app'); setWalletAddress(null); }
   }, [page]);
 
   const handleOpenWallet = useCallback((address) => {
-    setWalletAddress(address);
-    setPage('wallet');
-    setSelected(null);
-  }, []);
-
-  const handleFilterOwner = useCallback((address) => {
-    setSearch(address);
-    setView('bubbles');
-  }, []);
-
-  const handleReset = useCallback(() => {
-    setSearch('');
-    setFilters({ rarity: [], status: 'all' });
-    setView('bubbles');
-    setSelected(null);
+    setWalletAddress(address); setPage('wallet'); setSelected(null);
   }, []);
 
   const handleNavigate = useCallback((target) => {
-    setPage(target);
-    setSelected(null);
-    setShowCreateListing(false);
+    setPage(target); setSelected(null); setShowCreateListing(false); setShowProfile(false);
     if (target !== 'wallet') setWalletAddress(null);
   }, []);
 
   const handleConnectWallet = useCallback(() => {
-    if (wallet.isConnected) {
-      // Already connected — open list flow directly
-      setShowCreateListing(true);
-    } else {
-      setShowConnectWallet(true);
-    }
-  }, [wallet.isConnected]);
-
-  const handleWalletConnected = useCallback(() => {
-    setShowConnectWallet(false);
+    setShowConnectWallet(true);
   }, []);
+
+  const handleOpenCreateListing = useCallback(() => {
+    if (wallet.isConnected) setShowCreateListing(true);
+    else setShowConnectWallet(true);
+  }, [wallet.isConnected]);
 
   // Homepage
   if (page === 'home') {
     return <HomePage onLaunch={() => setPage('app')} />;
   }
 
-  // Wallet page
+  // Wallet page (tracker wallet lookup)
   if (page === 'wallet' && walletAddress) {
     return (
       <WalletPage
@@ -124,7 +99,7 @@ export default function App() {
     );
   }
 
-  // Loading state (only block tracker, not marketplace)
+  // Loading (tracker only)
   if (page === 'app' && nodesLoading && nodes.length === 0) {
     return <LoadingScreen error={nodesError} />;
   }
@@ -144,36 +119,37 @@ export default function App() {
         currentPage={page}
         wallet={wallet}
         onConnectWallet={handleConnectWallet}
+        onOpenWalletPanel={() => setShowWalletPanel(true)}
+        onOpenProfile={() => setShowProfile(true)}
       />
 
-      {page === 'marketplace' ? (
+      {/* ── Profile Page (overlay) ── */}
+      {showProfile && wallet.isConnected ? (
+        <ProfilePage
+          wallet={wallet}
+          isMobile={isMobile}
+          onClose={() => setShowProfile(false)}
+          onSelectNode={(node) => { handleSelect(node); setPage('app'); }}
+        />
+      ) : page === 'marketplace' ? (
         <MarketplacePage
           onSelectNode={(node) => { setSelected(node); setPage('app'); }}
           isMobile={isMobile}
           wallet={wallet}
           onConnectWallet={() => setShowConnectWallet(true)}
-          showCreateListing={showCreateListing}
-          onCloseCreateListing={() => setShowCreateListing(false)}
-          onOpenCreateListing={() => {
-            if (wallet.isConnected) setShowCreateListing(true);
-            else setShowConnectWallet(true);
-          }}
+          onOpenCreateListing={handleOpenCreateListing}
         />
       ) : (
         <>
           <Controls
-            search={search}
-            onSearch={setSearch}
-            filters={filters}
-            onFilters={setFilters}
-            view={view}
-            onView={setView}
+            search={search} onSearch={setSearch}
+            filters={filters} onFilters={setFilters}
+            view={view} onView={setView}
             activityCounts={activityCounts}
-            onReset={handleReset}
+            onReset={() => { setSearch(''); setFilters({ rarity: [], status: 'all' }); setView('bubbles'); setSelected(null); }}
             isMobile={isMobile}
             onToggleSidebar={() => setShowSidebar(s => !s)}
           />
-
           <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
             <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
               {view === 'bubbles' ? (
@@ -187,40 +163,43 @@ export default function App() {
                   onClose={() => setSelected(null)}
                   onSelect={handleSelect}
                   onOpenWallet={handleOpenWallet}
-                  onFilterOwner={handleFilterOwner}
+                  onFilterOwner={(a) => { setSearch(a); setView('bubbles'); }}
                   isMobile={isMobile}
                 />
               )}
             </div>
             {(!isMobile || showSidebar) && (
-              <Sidebar
-                stats={stats} hexes={hexes} hashpower={hashpower} nodes={nodes}
-                isMobile={isMobile}
-                onClose={() => setShowSidebar(false)}
-                onSelectNode={handleSelect}
-              />
+              <Sidebar stats={stats} hexes={hexes} hashpower={hashpower} nodes={nodes}
+                isMobile={isMobile} onClose={() => setShowSidebar(false)} onSelectNode={handleSelect} />
             )}
           </div>
           <Footer lastUpdated={lastUpdated} isMobile={isMobile} />
         </>
       )}
 
-      {/* Connect Wallet Modal */}
+      {/* ── Modals & Panels ── */}
+
       {showConnectWallet && (
         <ConnectWalletModal
-          wallet={wallet}
-          isMobile={isMobile}
+          wallet={wallet} isMobile={isMobile}
           onClose={() => setShowConnectWallet(false)}
-          onConnect={handleWalletConnected}
+          onConnect={() => setShowConnectWallet(false)}
         />
       )}
 
-      {/* Create Listing Modal (requires connected wallet) */}
       {showCreateListing && wallet.isConnected && (
         <CreateListing
           onClose={() => setShowCreateListing(false)}
           isMobile={isMobile}
           walletAddress={wallet.address}
+        />
+      )}
+
+      {showWalletPanel && wallet.isConnected && (
+        <WalletPanel
+          wallet={wallet} isMobile={isMobile}
+          onClose={() => setShowWalletPanel(false)}
+          onNavigateProfile={() => { setShowWalletPanel(false); setShowProfile(true); }}
         />
       )}
 

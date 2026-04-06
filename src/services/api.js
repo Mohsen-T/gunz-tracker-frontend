@@ -150,3 +150,27 @@ export async function fetchMarketplaceConfig() {
 export async function fetchTokenMarketplace(contract, tokenId) {
   return request(`/api/marketplace/token/${contract}/${tokenId}`);
 }
+
+/** Fetch notifications for a wallet */
+export async function fetchNotifications(address, { limit = 30, unreadOnly = false } = {}) {
+  const params = new URLSearchParams();
+  params.set('limit', limit);
+  if (unreadOnly) params.set('unreadOnly', 'true');
+  return request(`/api/marketplace/notifications/${address}?${params}`);
+}
+
+/** Mark notifications as read */
+export async function markNotificationsRead(address, ids = null) {
+  const resp = await fetch(`${BASE}/api/marketplace/notifications/read`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ address, ids }),
+  });
+  if (!resp.ok) throw new Error(`API error: ${resp.status}`);
+  return resp.json();
+}
+
+/** Fetch wallet marketplace summary (listings, offers, sales) */
+export async function fetchWalletMarketplace(address) {
+  return request(`/api/marketplace/wallet/${address}`);
+}
