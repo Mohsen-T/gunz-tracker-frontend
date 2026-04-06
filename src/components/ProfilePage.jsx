@@ -7,8 +7,17 @@ import { fetchWallet, fetchMarketplaceListings, fetchWalletMarketplace } from '.
  * User profile page (OpenSea-style).
  * Shows collection, active listings, offers made, and activity.
  */
-export default function ProfilePage({ wallet, onClose, onSelectNode, isMobile }) {
-  const [tab, setTab] = useState('collected');
+const TAB_MAP = {
+  profile: 'collected', collected: 'collected',
+  listings: 'listed', listed: 'listed',
+  offers: 'offers',
+  favorites: 'favorites',
+  settings: 'settings',
+  activity: 'activity',
+};
+
+export default function ProfilePage({ wallet, onClose, onSelectNode, isMobile, initialTab }) {
+  const [tab, setTab] = useState(TAB_MAP[initialTab] || 'collected');
   const [nodes, setNodes] = useState([]);
   const [listings, setListings] = useState([]);
   const [offers, setOffers] = useState([]);
@@ -43,8 +52,10 @@ export default function ProfilePage({ wallet, onClose, onSelectNode, isMobile })
   const tabs = [
     { id: 'collected', label: 'Collected', count: nodes.length },
     { id: 'listed', label: 'Listed', count: listings.length },
-    { id: 'offers', label: 'Offers Made', count: offers.length },
+    { id: 'offers', label: 'Offers', count: offers.length },
+    { id: 'favorites', label: 'Favorites', count: null },
     { id: 'activity', label: 'Activity', count: salesHistory.length || null },
+    { id: 'settings', label: 'Settings', count: null },
   ];
 
   return (
@@ -143,6 +154,10 @@ export default function ProfilePage({ wallet, onClose, onSelectNode, isMobile })
           <ListedGrid listings={listings} isMobile={isMobile} />
         ) : tab === 'offers' ? (
           <OffersTab offers={offers} wallet={wallet} />
+        ) : tab === 'favorites' ? (
+          <FavoritesTab />
+        ) : tab === 'settings' ? (
+          <SettingsTab wallet={wallet} />
         ) : (
           <ActivityTab salesHistory={salesHistory} wallet={wallet} mpStats={mpStats} />
         )}
@@ -313,6 +328,64 @@ function ActivityTab({ salesHistory, wallet, mpStats }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function FavoritesTab() {
+  return <EmptyState text="No favorites yet. Browse the marketplace and save items you like." />;
+}
+
+function SettingsTab({ wallet }) {
+  return (
+    <div style={{ maxWidth: 500 }}>
+      {/* Notifications settings */}
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#ddd', marginBottom: 12 }}>Notification Preferences</div>
+        {[
+          { label: 'Item Sold', desc: 'When one of your listed items sells', default: true },
+          { label: 'New Offers', desc: 'When someone makes an offer on your listing', default: true },
+          { label: 'Offer Accepted', desc: 'When your offer is accepted', default: true },
+          { label: 'Offer Expired', desc: 'When your offer expires', default: false },
+          { label: 'Price Drops', desc: 'When a watched item drops in price', default: false },
+        ].map((s, i) => (
+          <label key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #0d180d', cursor: 'pointer' }}>
+            <div>
+              <div style={{ fontSize: 11, color: '#aaa' }}>{s.label}</div>
+              <div style={{ fontSize: 9, color: '#445' }}>{s.desc}</div>
+            </div>
+            <input type="checkbox" defaultChecked={s.default} style={{ accentColor: '#4ADE80', width: 16, height: 16 }} />
+          </label>
+        ))}
+      </div>
+
+      {/* Account info */}
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#ddd', marginBottom: 12 }}>Account</div>
+        <div style={{ background: '#0a140a', borderRadius: 8, padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <div>
+            <div style={{ fontSize: 9, color: '#445', letterSpacing: 1, marginBottom: 2 }}>WALLET ADDRESS</div>
+            <div style={{ fontSize: 11, color: '#aaa', fontFamily: 'monospace' }}>{wallet?.address}</div>
+          </div>
+          <button onClick={() => navigator.clipboard?.writeText(wallet?.address)} style={{ background: '#0d180d', border: '1px solid #1a2a1a', borderRadius: 4, color: '#4ADE80', padding: '4px 10px', fontSize: 9, cursor: 'pointer', fontFamily: 'inherit' }}>COPY</button>
+        </div>
+        <div style={{ background: '#0a140a', borderRadius: 8, padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontSize: 9, color: '#445', letterSpacing: 1, marginBottom: 2 }}>CONNECTED VIA</div>
+            <div style={{ fontSize: 11, color: '#aaa' }}>{wallet?.provider || 'Unknown'}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Danger zone */}
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#EF4444', marginBottom: 12 }}>Danger Zone</div>
+        <button onClick={() => wallet?.disconnect()} style={{
+          background: '#1a0a0a', border: '1px solid #3a1a1a', borderRadius: 8,
+          color: '#EF4444', padding: '10px 20px', fontSize: 11, fontWeight: 700,
+          fontFamily: 'inherit', cursor: 'pointer', letterSpacing: 1,
+        }}>DISCONNECT WALLET</button>
+      </div>
     </div>
   );
 }

@@ -35,11 +35,27 @@ export default function App() {
   const [view, setView] = useState('bubbles');
   const [showSidebar, setShowSidebar] = useState(false);
 
-  // Modal/panel state
-  const [showConnectWallet, setShowConnectWallet] = useState(false);
-  const [showCreateListing, setShowCreateListing] = useState(false);
-  const [showWalletPanel, setShowWalletPanel] = useState(false);
-  const [showProfile, setShowProfile] = useState(false);
+  /**
+   * Unified overlay state — only one overlay/dropdown open at a time.
+   * Values: null | 'notifications' | 'accountMenu' | 'walletPanel'
+   *       | 'connectWallet' | 'createListing'
+   *       | 'profile' | 'listings' | 'offers' | 'favorites' | 'settings'
+   */
+  const [activeOverlay, setActiveOverlay] = useState(null);
+
+  const closeAllOverlays = useCallback(() => setActiveOverlay(null), []);
+
+  const handleSetOverlay = useCallback((overlay) => {
+    // Close current, open new (or close if same)
+    setActiveOverlay(prev => prev === overlay ? null : overlay);
+  }, []);
+
+  // Derived overlay booleans
+  const showConnectWallet = activeOverlay === 'connectWallet';
+  const showCreateListing = activeOverlay === 'createListing';
+  const showWalletPanel = activeOverlay === 'walletPanel';
+  const showProfilePage = ['profile', 'listings', 'offers', 'favorites', 'settings'].includes(activeOverlay);
+  const profileTab = showProfilePage ? activeOverlay : 'collected';
 
   const filtered = useMemo(() => {
     let f = nodes;
@@ -57,52 +73,40 @@ export default function App() {
     return f;
   }, [nodes, filters, search]);
 
-  const activityCounts = stats?.activity || null;
-
   const handleSelect = useCallback((node) => {
     setSelected(node);
-    setShowProfile(false);
+    closeAllOverlays();
     if (page === 'wallet') { setPage('app'); setWalletAddress(null); }
-  }, [page]);
+  }, [page, closeAllOverlays]);
 
   const handleOpenWallet = useCallback((address) => {
-    setWalletAddress(address); setPage('wallet'); setSelected(null);
-  }, []);
+    setWalletAddress(address); setPage('wallet'); setSelected(null); closeAllOverlays();
+  }, [closeAllOverlays]);
 
   const handleNavigate = useCallback((target) => {
-    setPage(target); setSelected(null); setShowCreateListing(false); setShowProfile(false);
+    setPage(target); setSelected(null); closeAllOverlays();
     if (target !== 'wallet') setWalletAddress(null);
-  }, []);
+  }, [closeAllOverlays]);
 
   const handleConnectWallet = useCallback(() => {
-    setShowConnectWallet(true);
+    setActiveOverlay('connectWallet');
   }, []);
 
   const handleOpenCreateListing = useCallback(() => {
-    if (wallet.isConnected) setShowCreateListing(true);
-    else setShowConnectWallet(true);
+    if (wallet.isConnected) setActiveOverlay('createListing');
+    else setActiveOverlay('connectWallet');
   }, [wallet.isConnected]);
 
   // Homepage
-  if (page === 'home') {
-    return <HomePage onLaunch={() => setPage('app')} />;
-  }
+  if (page === 'home') return <HomePage onLaunch={() => setPage('app')} />;
 
-  // Wallet page (tracker wallet lookup)
+  // Wallet page (tracker)
   if (page === 'wallet' && walletAddress) {
-    return (
-      <WalletPage
-        address={walletAddress}
-        onBack={() => { setPage('app'); setWalletAddress(null); }}
-        onSelectNode={handleSelect}
-      />
-    );
+    return <WalletPage address={walletAddress} onBack={() => { setPage('app'); setWalletAddress(null); }} onSelectNode={handleSelect} />;
   }
 
   // Loading (tracker only)
-  if (page === 'app' && nodesLoading && nodes.length === 0) {
-    return <LoadingScreen error={nodesError} />;
-  }
+  if (page === 'app' && nodesLoading && nodes.length === 0) return <LoadingScreen error={nodesError} />;
 
   return (
     <div style={{
@@ -111,61 +115,43 @@ export default function App() {
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
     }}>
       <Header
-        filteredCount={filtered.length}
-        stats={stats}
-        lastUpdated={lastUpdated}
-        isMobile={isMobile}
-        onNavigate={handleNavigate}
-        currentPage={page}
-        wallet={wallet}
-        onConnectWallet={handleConnectWallet}
-        onOpenWalletPanel={() => setShowWalletPanel(true)}
-        onOpenProfile={() => setShowProfile(true)}
+        filteredCount={filtered.length} stats={stats} lastUpdated={lastUpdated}
+        isMobile={isMobile} onNavigate={handleNavigate} currentPage={page}
+        wallet={wallet} onConnectWallet={handleConnectWallet}
+        activeOverlay={activeOverlay} onSetOverlay={handleSetOverlay}
       />
 
-      {/* ── Profile Page (overlay) ── */}
-      {showProfile && wallet.isConnected ? (
+      {/* Profile page (from account menu) */}
+      {showProfilePage && wallet.isConnected ? (
         <ProfilePage
-          wallet={wallet}
-          isMobile={isMobile}
-          onClose={() => setShowProfile(false)}
+          wallet={wallet} isMobile={isMobile}
+          onClose={closeAllOverlays}
           onSelectNode={(node) => { handleSelect(node); setPage('app'); }}
+          initialTab={profileTab}
         />
       ) : page === 'marketplace' ? (
         <MarketplacePage
           onSelectNode={(node) => { setSelected(node); setPage('app'); }}
-          isMobile={isMobile}
-          wallet={wallet}
-          onConnectWallet={() => setShowConnectWallet(true)}
+          isMobile={isMobile} wallet={wallet}
+          onConnectWallet={() => setActiveOverlay('connectWallet')}
           onOpenCreateListing={handleOpenCreateListing}
         />
       ) : (
         <>
           <Controls
-            search={search} onSearch={setSearch}
-            filters={filters} onFilters={setFilters}
-            view={view} onView={setView}
-            activityCounts={activityCounts}
+            search={search} onSearch={setSearch} filters={filters} onFilters={setFilters}
+            view={view} onView={setView} activityCounts={stats?.activity || null}
             onReset={() => { setSearch(''); setFilters({ rarity: [], status: 'all' }); setView('bubbles'); setSelected(null); }}
-            isMobile={isMobile}
-            onToggleSidebar={() => setShowSidebar(s => !s)}
+            isMobile={isMobile} onToggleSidebar={() => setShowSidebar(s => !s)}
           />
           <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
             <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-              {view === 'bubbles' ? (
-                <BubbleCanvas nodes={filtered} onSelect={handleSelect} selectedId={selected?.id} />
-              ) : (
-                <Leaderboard nodes={filtered} onSelect={handleSelect} isMobile={isMobile} />
-              )}
+              {view === 'bubbles'
+                ? <BubbleCanvas nodes={filtered} onSelect={handleSelect} selectedId={selected?.id} />
+                : <Leaderboard nodes={filtered} onSelect={handleSelect} isMobile={isMobile} />}
               {selected && (
-                <DetailPanel
-                  node={selected}
-                  onClose={() => setSelected(null)}
-                  onSelect={handleSelect}
-                  onOpenWallet={handleOpenWallet}
-                  onFilterOwner={(a) => { setSearch(a); setView('bubbles'); }}
-                  isMobile={isMobile}
-                />
+                <DetailPanel node={selected} onClose={() => setSelected(null)} onSelect={handleSelect}
+                  onOpenWallet={handleOpenWallet} onFilterOwner={(a) => { setSearch(a); setView('bubbles'); }} isMobile={isMobile} />
               )}
             </div>
             {(!isMobile || showSidebar) && (
@@ -177,30 +163,18 @@ export default function App() {
         </>
       )}
 
-      {/* ── Modals & Panels ── */}
-
+      {/* ── Full-screen overlays ── */}
       {showConnectWallet && (
-        <ConnectWalletModal
-          wallet={wallet} isMobile={isMobile}
-          onClose={() => setShowConnectWallet(false)}
-          onConnect={() => setShowConnectWallet(false)}
-        />
+        <ConnectWalletModal wallet={wallet} isMobile={isMobile}
+          onClose={closeAllOverlays} onConnect={closeAllOverlays} />
       )}
-
       {showCreateListing && wallet.isConnected && (
-        <CreateListing
-          onClose={() => setShowCreateListing(false)}
-          isMobile={isMobile}
-          walletAddress={wallet.address}
-        />
+        <CreateListing onClose={closeAllOverlays} isMobile={isMobile} walletAddress={wallet.address} />
       )}
-
       {showWalletPanel && wallet.isConnected && (
-        <WalletPanel
-          wallet={wallet} isMobile={isMobile}
-          onClose={() => setShowWalletPanel(false)}
-          onNavigateProfile={() => { setShowWalletPanel(false); setShowProfile(true); }}
-        />
+        <WalletPanel wallet={wallet} isMobile={isMobile}
+          onClose={closeAllOverlays}
+          onNavigateProfile={() => setActiveOverlay('profile')} />
       )}
 
       <style>{`

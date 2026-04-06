@@ -14,6 +14,9 @@ export default function WalletPanel({ wallet, onClose, isMobile, onNavigateProfi
   const [loading, setLoading] = useState(true);
   const [walletData, setWalletData] = useState(null);
   const [balance, setBalance] = useState(null);
+  const [actionPanel, setActionPanel] = useState(null); // 'send' | 'swap' | 'deposit' | null
+  const [sendTo, setSendTo] = useState('');
+  const [sendAmount, setSendAmount] = useState('');
 
   useEffect(() => {
     if (!wallet?.address) return;
@@ -81,24 +84,77 @@ export default function WalletPanel({ wallet, onClose, isMobile, onNavigateProfi
           padding: '16px 20px', borderBottom: '1px solid #0d180d',
         }}>
           {[
-            { label: 'Send', icon: '↑', color: '#60A5FA' },
-            { label: 'Swap', icon: '⇄', color: '#C084FC' },
-            { label: 'Deposit', icon: '↓', color: '#4ADE80' },
-            { label: 'Buy', icon: '+', color: '#FBBF24' },
+            { id: 'send', label: 'Send', icon: '↑', color: '#60A5FA' },
+            { id: 'swap', label: 'Swap', icon: '⇄', color: '#C084FC' },
+            { id: 'deposit', label: 'Deposit', icon: '↓', color: '#4ADE80' },
+            { id: 'buy', label: 'Buy', icon: '+', color: '#FBBF24' },
           ].map(a => (
-            <button key={a.label} style={{
-              background: '#0a140a', border: '1px solid #142014', borderRadius: 10,
+            <button key={a.id} onClick={() => setActionPanel(actionPanel === a.id ? null : a.id)} style={{
+              background: actionPanel === a.id ? '#0c180c' : '#0a140a',
+              border: `1px solid ${actionPanel === a.id ? a.color + '55' : '#142014'}`, borderRadius: 10,
               padding: '10px 4px', cursor: 'pointer', textAlign: 'center',
-              fontFamily: 'inherit', transition: 'border-color 0.15s',
+              fontFamily: 'inherit', transition: 'all 0.15s',
             }}
               onMouseEnter={e => e.currentTarget.style.borderColor = a.color + '44'}
-              onMouseLeave={e => e.currentTarget.style.borderColor = '#142014'}
+              onMouseLeave={e => { if (actionPanel !== a.id) e.currentTarget.style.borderColor = '#142014'; }}
             >
               <div style={{ fontSize: 18, color: a.color, marginBottom: 4 }}>{a.icon}</div>
               <div style={{ fontSize: 9, color: '#778', letterSpacing: 1 }}>{a.label}</div>
             </button>
           ))}
         </div>
+
+        {/* Action panels */}
+        {actionPanel === 'send' && (
+          <ActionSection title="Send GUN" color="#60A5FA">
+            <input placeholder="Recipient address (0x...)" value={sendTo} onChange={e => setSendTo(e.target.value)}
+              style={inputStyle} />
+            <input type="number" placeholder="Amount" value={sendAmount} onChange={e => setSendAmount(e.target.value)}
+              style={{ ...inputStyle, marginTop: 8 }} />
+            <div style={{ fontSize: 9, color: '#445', margin: '6px 0' }}>
+              Balance: {balance != null ? `${balance.toFixed(2)} GUN` : '—'}
+            </div>
+            <button disabled={!sendTo || !sendAmount} style={actionBtnStyle(!!sendTo && !!sendAmount, '#60A5FA')}>
+              SEND
+            </button>
+          </ActionSection>
+        )}
+        {actionPanel === 'swap' && (
+          <ActionSection title="Swap Tokens" color="#C084FC">
+            <div style={{ fontSize: 11, color: '#778', lineHeight: 1.6 }}>
+              Token swapping will be available soon via integrated DEX.
+            </div>
+            <div style={{ fontSize: 9, color: '#445', marginTop: 8 }}>Supported pairs: GUN/USDT, GUN/ETH</div>
+          </ActionSection>
+        )}
+        {actionPanel === 'deposit' && (
+          <ActionSection title="Deposit GUN" color="#4ADE80">
+            <div style={{ fontSize: 11, color: '#778', marginBottom: 8 }}>Send GUN to your wallet address:</div>
+            <div style={{
+              background: '#060b06', border: '1px solid #1a2a1a', borderRadius: 8,
+              padding: '10px', fontSize: 10, color: '#4ADE80', fontFamily: 'monospace',
+              wordBreak: 'break-all', marginBottom: 8,
+            }}>
+              {wallet?.address}
+            </div>
+            <button onClick={() => navigator.clipboard?.writeText(wallet?.address)} style={actionBtnStyle(true, '#4ADE80')}>
+              COPY ADDRESS
+            </button>
+            <div style={{ fontSize: 9, color: '#EF444488', marginTop: 8 }}>
+              Only send GUN tokens on the GUNZ network to this address.
+            </div>
+          </ActionSection>
+        )}
+        {actionPanel === 'buy' && (
+          <ActionSection title="Buy GUN" color="#FBBF24">
+            <div style={{ fontSize: 11, color: '#778', lineHeight: 1.6, marginBottom: 8 }}>
+              Purchase GUN tokens directly. Coming soon via fiat on-ramp.
+            </div>
+            <div style={{ fontSize: 9, color: '#445' }}>
+              In the meantime, acquire GUN from supported exchanges and deposit to your wallet.
+            </div>
+          </ActionSection>
+        )}
 
         {/* Tabs */}
         <div style={{ display: 'flex', borderBottom: '1px solid #142014' }}>
@@ -221,4 +277,31 @@ export default function WalletPanel({ wallet, onClose, isMobile, onNavigateProfi
       `}</style>
     </>
   );
+}
+
+function ActionSection({ title, color, children }) {
+  return (
+    <div style={{ padding: '14px 20px', borderBottom: '1px solid #0d180d', background: '#050a05', animation: 'fadeIn 0.15s ease-out' }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color, letterSpacing: 1, marginBottom: 10 }}>{title}</div>
+      {children}
+      <style>{`@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }`}</style>
+    </div>
+  );
+}
+
+const inputStyle = {
+  width: '100%', background: '#060b06', border: '1px solid #1a2a1a',
+  borderRadius: 8, color: '#ddd', padding: '10px 12px',
+  fontSize: 11, fontFamily: 'inherit', outline: 'none',
+};
+
+function actionBtnStyle(enabled, color) {
+  return {
+    width: '100%', marginTop: 8, padding: '10px',
+    background: enabled ? color + '22' : '#0a140a',
+    border: `1px solid ${enabled ? color + '55' : '#1a2a1a'}`,
+    borderRadius: 8, color: enabled ? color : '#334',
+    fontSize: 11, fontWeight: 700, fontFamily: 'inherit',
+    cursor: enabled ? 'pointer' : 'default', letterSpacing: 1,
+  };
 }
