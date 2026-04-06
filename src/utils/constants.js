@@ -35,5 +35,5 @@ export const GUNZ_GAME_ITEM_CONTRACT = '0x9ED98e159BE43a8d42b64053831FCAE5e4d7d2
 export const GUNZSCAN_ITEM_URL = (id) =>
   `https://gunzscan.io/token/0x9ED98e159BE43a8d42b64053831FCAE5e4d7d271/instance/${id}`;
 
-// Marketplace contract (set after deployment)
-export const GUNZ_MARKETPLACE_CONTRACT = '0x0000000000000000000000000000000000000000';
+// Marketplace contract (local testnet)
+export const GUNZ_MARKETPLACE_CONTRACT = '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512';
