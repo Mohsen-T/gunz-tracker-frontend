@@ -122,13 +122,6 @@ export default function ProfilePage({ wallet, onClose, onSelectNode, isMobile, i
             ))}
           </div>
 
-          {/* Back button */}
-          <button onClick={onClose} style={{
-            flexShrink: 0, background: '#0a140a', border: '1px solid #1a2a1a',
-            borderRadius: 8, color: '#556', padding: '6px 14px', fontSize: 10,
-            cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, letterSpacing: 1,
-            ...(isMobile ? { position: 'absolute', top: 16, right: 16 } : {}),
-          }}>BACK</button>
         </div>
       </div>
 
@@ -343,7 +336,7 @@ function FavoritesTab() {
 
 function SettingsTab({ wallet }) {
   return (
-    <div style={{ maxWidth: 500 }}>
+    <div style={{ maxWidth: 500, margin: '0 auto' }}>
       {/* Notifications settings */}
       <div style={{ marginBottom: 24 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: '#ddd', marginBottom: 12 }}>Notification Preferences</div>

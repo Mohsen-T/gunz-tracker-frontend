@@ -47,16 +47,13 @@ export default function App() {
 
   const closeAllOverlays = useCallback(() => setActiveOverlay(null), []);
 
-  const PROFILE_VIEWS = ['profile', 'listings', 'offers', 'favorites', 'settings'];
-
   const handleSetOverlay = useCallback((overlay) => {
-    // Profile-related targets open the profile page, not an overlay
-    if (PROFILE_VIEWS.includes(overlay)) {
+    const profileViews = ['profile', 'listings', 'offers', 'favorites', 'settings'];
+    if (profileViews.includes(overlay)) {
       setProfileView(overlay);
-      setActiveOverlay(null); // close any dropdown
+      setActiveOverlay(null);
       return;
     }
-    // Toggle dropdown overlay
     setActiveOverlay(prev => prev === overlay ? null : overlay);
   }, []);
 
