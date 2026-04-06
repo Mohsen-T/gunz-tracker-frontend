@@ -18,6 +18,12 @@ const TAB_MAP = {
 
 export default function ProfilePage({ wallet, onClose, onSelectNode, isMobile, initialTab }) {
   const [tab, setTab] = useState(TAB_MAP[initialTab] || 'collected');
+
+  // Sync tab when menu navigates to a different profile view
+  useEffect(() => {
+    const mapped = TAB_MAP[initialTab];
+    if (mapped) setTab(mapped);
+  }, [initialTab]);
   const [nodes, setNodes] = useState([]);
   const [listings, setListings] = useState([]);
   const [offers, setOffers] = useState([]);
