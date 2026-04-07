@@ -85,14 +85,28 @@ export function useWallet() {
     setConnecting(true);
     setError(null);
     try {
+      // wallet_requestPermissions opens MetaMask's account picker
+      // so users can choose which account to connect
+      try {
+        await window.ethereum.request({
+          method: 'wallet_requestPermissions',
+          params: [{ eth_accounts: {} }],
+        });
+      } catch (permErr) {
+        // Older wallets may not support wallet_requestPermissions — fall through
+        if (permErr.code === 4001) throw permErr; // user rejected
+      }
+
       const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
       const addr = accounts[0].toLowerCase();
       setAddress(addr);
       setProvider('metamask');
+      setSigned(false); // require fresh signature when account changes
+      localStorage.removeItem(STORAGE_KEY);
       setConnecting(false);
       return addr;
     } catch (err) {
-      setError(err.message || 'Failed to connect MetaMask');
+      setError(err.code === 4001 ? 'Connection rejected' : (err.message || 'Failed to connect MetaMask'));
       setConnecting(false);
       return null;
     }
