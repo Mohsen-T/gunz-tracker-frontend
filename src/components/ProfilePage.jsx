@@ -52,7 +52,27 @@ export default function ProfilePage({ wallet, onClose, onSelectNode, isMobile, i
     ]).then(([wData, mData]) => {
       if (cancelled) return;
       setWalletData(wData);
-      setNodes(wData.nodes || []);
+
+      // Merge tracker-derived nodes with marketplace-acquired NFTs.
+      // Local Hardhat transfers won't show in the tracker DB, so we add NFTs
+      // the user purchased via the marketplace (and haven't re-sold).
+      const trackerNodes = wData.nodes || [];
+      const ownedFromMp = mData.ownedNfts || [];
+      const trackerIds = new Set(trackerNodes.map(n => String(n.id)));
+      const merged = [...trackerNodes];
+      for (const o of ownedFromMp) {
+        if (!trackerIds.has(String(o.id))) {
+          merged.push({
+            id: o.id,
+            rarity: o.rarity || 'Common',
+            hashpower: o.hashpower || 0,
+            hexesDecoded: o.hexesDecoded || 0,
+            activity: o.activity || 'Active',
+            _fromMarketplace: true,
+          });
+        }
+      }
+      setNodes(merged);
       setListings(mData.activeListings || []);
       setOffers(mData.activeOffers || []);
       setSalesHistory(mData.salesHistory || []);
