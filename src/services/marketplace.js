@@ -77,16 +77,16 @@ async function getMarketplaceContract(withSigner = false) {
 
 /**
  * Get ERC721 contract instance for NFT approval.
+ * Pass the ABI array directly (ethers v6 parses string fragments).
  */
 async function getNftContract(nftAddress, withSigner = false) {
-  const { Contract, Interface } = await getEthers();
-  const iface = new Interface(ERC721_ABI);
+  const { Contract } = await getEthers();
   if (withSigner) {
     const signer = await getSigner();
-    return new Contract(nftAddress, iface, signer);
+    return new Contract(nftAddress, ERC721_ABI, signer);
   }
   const provider = await getProvider();
-  return new Contract(nftAddress, iface, provider);
+  return new Contract(nftAddress, ERC721_ABI, provider);
 }
 
 // ═══════════════════════════════════════════
@@ -125,35 +125,60 @@ export async function getContractConfig() {
 
 /**
  * Check if NFT is approved for marketplace.
- * Verifies the contract exists at the given address first.
+ * Verifies the contract exists and the caller owns the token.
  */
 export async function checkApproval(nftContract, tokenId, ownerAddress) {
-  // Sanity check: NFT contract must have code at this address
+  console.log('[checkApproval] start', { nftContract, tokenId, ownerAddress });
+
+  // 1. Verify contract code exists at address
   const provider = await getProvider();
   const code = await provider.getCode(nftContract);
+  console.log('[checkApproval] code length:', code?.length);
   if (!code || code === '0x') {
     throw new Error(
-      `No NFT contract at ${nftContract} — this token may belong to a deployment from a previous Hardhat session. ` +
-      `Reset your local DB or buy a fresh NFT to test listing.`
+      `No NFT contract at ${nftContract}. This token belongs to a previous Hardhat session. ` +
+      `Restart your test setup: reset-local.js → seed-db.js → reload page.`
     );
   }
 
-  // Verify the user actually owns the token on this chain
+  // 2. Verify ownership
   const nft = await getNftContract(nftContract);
+  let owner;
   try {
-    const owner = await nft.ownerOf(BigInt(tokenId));
-    if (owner.toLowerCase() !== ownerAddress.toLowerCase()) {
-      throw new Error(`You don't own token #${tokenId} on this chain. Owner is ${owner}.`);
-    }
+    owner = await nft.ownerOf(BigInt(tokenId));
+    console.log('[checkApproval] owner:', owner);
   } catch (err) {
-    if (err.message?.startsWith("You don't")) throw err;
-    throw new Error(`Failed to verify NFT ownership: token #${tokenId} may not exist on the chain.`);
+    console.error('[checkApproval] ownerOf failed:', err);
+    throw new Error(`Token #${tokenId} doesn't exist on contract ${nftContract}.`);
+  }
+  if (owner.toLowerCase() !== ownerAddress.toLowerCase()) {
+    throw new Error(`You don't own token #${tokenId}. Current owner: ${owner}`);
   }
 
-  const approved = await nft.getApproved(BigInt(tokenId));
-  if (approved.toLowerCase() === getMarketplaceAddress().toLowerCase()) return true;
-  const approvedAll = await nft.isApprovedForAll(ownerAddress, getMarketplaceAddress());
-  return approvedAll;
+  // 3. Check approval (single + all)
+  const marketAddr = getMarketplaceAddress();
+  console.log('[checkApproval] checking approval for marketplace:', marketAddr);
+
+  let approved = '0x0000000000000000000000000000000000000000';
+  try {
+    approved = await nft.getApproved(BigInt(tokenId));
+  } catch (err) {
+    console.warn('[checkApproval] getApproved failed:', err.message);
+  }
+  console.log('[checkApproval] getApproved result:', approved);
+  if (approved && approved.toLowerCase() === marketAddr.toLowerCase()) {
+    console.log('[checkApproval] already approved (single)');
+    return true;
+  }
+
+  let approvedAll = false;
+  try {
+    approvedAll = await nft.isApprovedForAll(ownerAddress, marketAddr);
+  } catch (err) {
+    console.warn('[checkApproval] isApprovedForAll failed:', err.message);
+  }
+  console.log('[checkApproval] isApprovedForAll:', approvedAll);
+  return !!approvedAll;
 }
 
 /**
