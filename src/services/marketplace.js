@@ -124,15 +124,41 @@ export async function getContractConfig() {
 }
 
 /**
+ * Wrap a promise with a timeout so a hung RPC call surfaces as a real error.
+ */
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
+/**
  * Check if NFT is approved for marketplace.
  * Verifies the contract exists and the caller owns the token.
  */
 export async function checkApproval(nftContract, tokenId, ownerAddress) {
   console.log('[checkApproval] start', { nftContract, tokenId, ownerAddress });
 
-  // 1. Verify contract code exists at address
-  const provider = await getProvider();
-  const code = await provider.getCode(nftContract);
+  if (!nftContract || nftContract === '0x0000000000000000000000000000000000000000') {
+    throw new Error('Invalid NFT contract address (empty/zero). Token data is missing the contract address.');
+  }
+
+  // 1. Use raw window.ethereum directly to avoid any wrapper issues
+  console.log('[checkApproval] querying chain via window.ethereum.eth_getCode...');
+  let code;
+  try {
+    code = await withTimeout(
+      window.ethereum.request({ method: 'eth_getCode', params: [nftContract, 'latest'] }),
+      8000,
+      'eth_getCode'
+    );
+  } catch (err) {
+    console.error('[checkApproval] getCode error:', err);
+    throw new Error(`Network call failed: ${err.message}. Is MetaMask connected to the right network (Hardhat Local, Chain ID 31337)?`);
+  }
   console.log('[checkApproval] code length:', code?.length);
   if (!code || code === '0x') {
     throw new Error(
@@ -141,15 +167,15 @@ export async function checkApproval(nftContract, tokenId, ownerAddress) {
     );
   }
 
-  // 2. Verify ownership
+  // 2. Verify ownership via ethers contract
   const nft = await getNftContract(nftContract);
   let owner;
   try {
-    owner = await nft.ownerOf(BigInt(tokenId));
+    owner = await withTimeout(nft.ownerOf(BigInt(tokenId)), 8000, 'ownerOf');
     console.log('[checkApproval] owner:', owner);
   } catch (err) {
     console.error('[checkApproval] ownerOf failed:', err);
-    throw new Error(`Token #${tokenId} doesn't exist on contract ${nftContract}.`);
+    throw new Error(`Token #${tokenId} doesn't exist on contract ${nftContract}: ${err.message}`);
   }
   if (owner.toLowerCase() !== ownerAddress.toLowerCase()) {
     throw new Error(`You don't own token #${tokenId}. Current owner: ${owner}`);
@@ -161,7 +187,7 @@ export async function checkApproval(nftContract, tokenId, ownerAddress) {
 
   let approved = '0x0000000000000000000000000000000000000000';
   try {
-    approved = await nft.getApproved(BigInt(tokenId));
+    approved = await withTimeout(nft.getApproved(BigInt(tokenId)), 8000, 'getApproved');
   } catch (err) {
     console.warn('[checkApproval] getApproved failed:', err.message);
   }
@@ -173,7 +199,7 @@ export async function checkApproval(nftContract, tokenId, ownerAddress) {
 
   let approvedAll = false;
   try {
-    approvedAll = await nft.isApprovedForAll(ownerAddress, marketAddr);
+    approvedAll = await withTimeout(nft.isApprovedForAll(ownerAddress, marketAddr), 8000, 'isApprovedForAll');
   } catch (err) {
     console.warn('[checkApproval] isApprovedForAll failed:', err.message);
   }
