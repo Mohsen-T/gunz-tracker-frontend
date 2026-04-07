@@ -112,7 +112,7 @@ export async function getContractConfig() {
  */
 export async function checkApproval(nftContract, tokenId, ownerAddress) {
   const nft = await getNftContract(nftContract);
-  const approved = await nft.getApproved(tokenId);
+  const approved = await nft.getApproved(BigInt(tokenId));
   if (approved.toLowerCase() === getMarketplaceAddress().toLowerCase()) return true;
   const approvedAll = await nft.isApprovedForAll(ownerAddress, getMarketplaceAddress());
   return approvedAll;
@@ -152,7 +152,7 @@ export async function isOfferExpired(offerId) {
  */
 export async function approveNft(nftContract, tokenId) {
   const nft = await getNftContract(nftContract, true);
-  const tx = await nft.approve(getMarketplaceAddress(), tokenId);
+  const tx = await nft.approve(getMarketplaceAddress(), BigInt(tokenId));
   const receipt = await tx.wait();
   return { hash: receipt.hash };
 }
@@ -167,7 +167,7 @@ export async function approveNft(nftContract, tokenId) {
 export async function listNft(nftContract, tokenId, priceGun) {
   const { parseEther } = await getEthers();
   const mp = await getMarketplaceContract(true);
-  const tx = await mp.list(nftContract, tokenId, parseEther(priceGun));
+  const tx = await mp.list(nftContract, BigInt(tokenId), parseEther(String(priceGun)));
   const receipt = await tx.wait();
 
   // Parse listingId from Listed event
@@ -194,7 +194,7 @@ export async function listNft(nftContract, tokenId, priceGun) {
 export async function buyNft(listingId, priceGun) {
   const { parseEther } = await getEthers();
   const mp = await getMarketplaceContract(true);
-  const tx = await mp.buy(listingId, { value: parseEther(priceGun) });
+  const tx = await mp.buy(BigInt(listingId), { value: parseEther(String(priceGun)) });
   const receipt = await tx.wait();
   return { hash: receipt.hash };
 }
@@ -208,7 +208,7 @@ export async function buyNft(listingId, priceGun) {
 export async function cancelListing(listingId, penaltyGun) {
   const { parseEther } = await getEthers();
   const mp = await getMarketplaceContract(true);
-  const tx = await mp.cancelListing(listingId, { value: parseEther(penaltyGun) });
+  const tx = await mp.cancelListing(BigInt(listingId), { value: parseEther(String(penaltyGun)) });
   const receipt = await tx.wait();
   return { hash: receipt.hash };
 }
@@ -222,7 +222,7 @@ export async function cancelListing(listingId, penaltyGun) {
 export async function updateListingPrice(listingId, newPriceGun) {
   const { parseEther } = await getEthers();
   const mp = await getMarketplaceContract(true);
-  const tx = await mp.updatePrice(listingId, parseEther(newPriceGun));
+  const tx = await mp.updatePrice(BigInt(listingId), parseEther(String(newPriceGun)));
   const receipt = await tx.wait();
   return { hash: receipt.hash };
 }
@@ -236,7 +236,7 @@ export async function updateListingPrice(listingId, newPriceGun) {
 export async function placeOffer(listingId, amountGun) {
   const { parseEther } = await getEthers();
   const mp = await getMarketplaceContract(true);
-  const tx = await mp.placeOffer(listingId, { value: parseEther(amountGun) });
+  const tx = await mp.placeOffer(BigInt(listingId), { value: parseEther(String(amountGun)) });
   const receipt = await tx.wait();
 
   let offerId = null;
@@ -260,7 +260,7 @@ export async function placeOffer(listingId, amountGun) {
  */
 export async function acceptOffer(offerId) {
   const mp = await getMarketplaceContract(true);
-  const tx = await mp.acceptOffer(offerId);
+  const tx = await mp.acceptOffer(BigInt(offerId));
   const receipt = await tx.wait();
   return { hash: receipt.hash };
 }
@@ -272,7 +272,7 @@ export async function acceptOffer(offerId) {
  */
 export async function withdrawOffer(offerId) {
   const mp = await getMarketplaceContract(true);
-  const tx = await mp.withdrawOffer(offerId);
+  const tx = await mp.withdrawOffer(BigInt(offerId));
   const receipt = await tx.wait();
   return { hash: receipt.hash };
 }
