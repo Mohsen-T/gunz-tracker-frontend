@@ -142,10 +142,14 @@ export function useWallet() {
     setUnreadNotifications(0);
   }, []);
 
+  const decrementUnread = useCallback((n = 1) => {
+    setUnreadNotifications(prev => Math.max(0, prev - n));
+  }, []);
+
   return {
     address, provider, connecting, signed, error, balance, unreadNotifications,
     isConnected: !!address && signed,
-    connectMetaMask, requestSignature, disconnect, clearUnread,
+    connectMetaMask, requestSignature, disconnect, clearUnread, decrementUnread,
     SIG_MESSAGE,
   };
 }

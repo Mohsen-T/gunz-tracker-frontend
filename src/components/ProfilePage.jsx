@@ -460,7 +460,14 @@ function ActivityTab({ salesHistory, wallet, mpStats, onOpen }) {
         </div>
       )}
       {salesHistory.map((s, i) => {
-        const isSeller = wallet?.address?.toLowerCase() === s.seller?.toLowerCase();
+        const myAddr = wallet?.address?.toLowerCase() || '';
+        const sellerAddr = (s.seller || '').toLowerCase();
+        const buyerAddr = (s.buyer || '').toLowerCase();
+        // Determine role from BOTH fields, not just seller (defends against missing/null fields)
+        const isSeller = myAddr && myAddr === sellerAddr;
+        const isBuyer = myAddr && myAddr === buyerAddr;
+        const label = isSeller ? 'Sold' : isBuyer ? 'Bought' : 'Trade';
+        const color = isSeller ? '#4ADE80' : '#60A5FA';
         return (
           <div key={i}
             onClick={() => onOpen?.({ id: s.tokenId, rarity: null })}
@@ -473,11 +480,11 @@ function ActivityTab({ salesHistory, wallet, mpStats, onOpen }) {
           >
             <img src={NODE_IMAGE_URL(s.tokenId)} alt={`#${s.tokenId}`}
               style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover', background: '#060b06' }} />
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: isSeller ? '#4ADE80' : '#60A5FA', flexShrink: 0 }} />
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
             <div style={{ flex: 1 }}>
-              <span style={{ fontSize: 11, color: '#aaa' }}>{isSeller ? 'Sold' : 'Bought'} Node #{s.tokenId}</span>
+              <span style={{ fontSize: 11, color: '#aaa' }}>{label} Node #{s.tokenId}</span>
             </div>
-            <span style={{ fontSize: 12, fontWeight: 700, color: isSeller ? '#4ADE80' : '#60A5FA' }}>{Number(s.price).toFixed(2)} GUN</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color }}>{Number(s.price).toFixed(2)} GUN</span>
             <span style={{ fontSize: 9, color: '#334' }}>{timeAgo(s.soldAt)}</span>
           </div>
         );

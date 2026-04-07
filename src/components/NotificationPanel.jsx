@@ -31,6 +31,7 @@ export default function NotificationPanel({ onClose, isMobile, wallet }) {
       await markNotificationsRead(wallet.address);
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
       setUnreadCount(0);
+      wallet.clearUnread?.(); // sync header badge immediately
     } catch {}
   };
 
@@ -40,6 +41,7 @@ export default function NotificationPanel({ onClose, isMobile, wallet }) {
       await markNotificationsRead(wallet.address, [id]);
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
       setUnreadCount(prev => Math.max(0, prev - 1));
+      wallet.decrementUnread?.(1); // sync header badge immediately
     } catch {}
   };
 
