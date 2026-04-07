@@ -36,7 +36,6 @@ let _ethers = null;
 
 async function getEthers() {
   if (_ethers) return _ethers;
-  // Dynamic import — ethers is loaded only when needed
   _ethers = await import('ethers');
   return _ethers;
 }
@@ -45,8 +44,34 @@ function getMarketplaceAddress() {
   return GUNZ_MARKETPLACE_CONTRACT;
 }
 
+// Detect if we're talking to a local dev chain (Hardhat = 31337)
+async function isLocalDevChain() {
+  try {
+    const chainId = await window.ethereum?.request({ method: 'eth_chainId' });
+    return chainId === '0x7a69'; // 31337
+  } catch { return false; }
+}
+
 /**
- * Get ethers provider from MetaMask.
+ * Read-only provider.
+ * On Hardhat localhost, MetaMask throttles RPC calls badly — bypass it
+ * with a direct JsonRpcProvider for fast reads. On real networks, use MetaMask.
+ */
+let _readProvider = null;
+async function getReadProvider() {
+  if (_readProvider) return _readProvider;
+  const { BrowserProvider, JsonRpcProvider } = await getEthers();
+  if (await isLocalDevChain()) {
+    _readProvider = new JsonRpcProvider('http://127.0.0.1:8545');
+  } else {
+    if (!window.ethereum) throw new Error('No wallet detected');
+    _readProvider = new BrowserProvider(window.ethereum);
+  }
+  return _readProvider;
+}
+
+/**
+ * Write provider (for signing transactions). Always uses MetaMask.
  */
 async function getProvider() {
   if (!window.ethereum) throw new Error('No wallet detected');
@@ -54,9 +79,6 @@ async function getProvider() {
   return new BrowserProvider(window.ethereum);
 }
 
-/**
- * Get signer from connected wallet.
- */
 async function getSigner() {
   const provider = await getProvider();
   return provider.getSigner();
@@ -71,13 +93,13 @@ async function getMarketplaceContract(withSigner = false) {
     const signer = await getSigner();
     return new Contract(getMarketplaceAddress(), MARKETPLACE_ABI, signer);
   }
-  const provider = await getProvider();
+  // Read-only — use direct RPC on local dev to bypass MetaMask throttling
+  const provider = await getReadProvider();
   return new Contract(getMarketplaceAddress(), MARKETPLACE_ABI, provider);
 }
 
 /**
  * Get ERC721 contract instance for NFT approval.
- * Pass the ABI array directly (ethers v6 parses string fragments).
  */
 async function getNftContract(nftAddress, withSigner = false) {
   const { Contract } = await getEthers();
@@ -85,7 +107,7 @@ async function getNftContract(nftAddress, withSigner = false) {
     const signer = await getSigner();
     return new Contract(nftAddress, ERC721_ABI, signer);
   }
-  const provider = await getProvider();
+  const provider = await getReadProvider();
   return new Contract(nftAddress, ERC721_ABI, provider);
 }
 
@@ -146,18 +168,15 @@ export async function checkApproval(nftContract, tokenId, ownerAddress) {
     throw new Error('Invalid NFT contract address (empty/zero). Token data is missing the contract address.');
   }
 
-  // 1. Use raw window.ethereum directly to avoid any wrapper issues
-  console.log('[checkApproval] querying chain via window.ethereum.eth_getCode...');
+  // 1. Verify contract exists — use direct RPC (bypasses MetaMask throttling on local)
+  console.log('[checkApproval] querying chain code...');
   let code;
   try {
-    code = await withTimeout(
-      window.ethereum.request({ method: 'eth_getCode', params: [nftContract, 'latest'] }),
-      8000,
-      'eth_getCode'
-    );
+    const provider = await getReadProvider();
+    code = await withTimeout(provider.getCode(nftContract), 8000, 'getCode');
   } catch (err) {
     console.error('[checkApproval] getCode error:', err);
-    throw new Error(`Network call failed: ${err.message}. Is MetaMask connected to the right network (Hardhat Local, Chain ID 31337)?`);
+    throw new Error(`Network call failed: ${err.message}. Is your Hardhat node running and MetaMask on Chain ID 31337?`);
   }
   console.log('[checkApproval] code length:', code?.length);
   if (!code || code === '0x') {
