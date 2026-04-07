@@ -48,7 +48,14 @@ export default function App() {
   const closeAllOverlays = useCallback(() => setActiveOverlay(null), []);
 
   const handleSetOverlay = useCallback((overlay) => {
-    const profileViews = ['profile', 'listings', 'offers', 'favorites', 'settings'];
+    const profileViews = [
+      'profile', 'collected',
+      'listings', 'listed',
+      'offers',
+      'favorites',
+      'activity',
+      'settings',
+    ];
     if (profileViews.includes(overlay)) {
       setProfileView(overlay);
       setActiveOverlay(null);

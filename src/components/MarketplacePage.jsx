@@ -46,6 +46,16 @@ export default function MarketplacePage({ onSelectNode, isMobile, wallet, onConn
   const [page, setPage] = useState(0);
   const [selectedListing, setSelectedListing] = useState(null);
   const [tab, setTab] = useState('browse');
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const refresh = useCallback(() => setRefreshKey(k => k + 1), []);
+
+  // When the listing modal closes, refresh marketplace data
+  // (in case a buy/offer/cancel/accept happened inside it)
+  const handleCloseDetail = useCallback(() => {
+    setSelectedListing(null);
+    refresh();
+  }, [refresh]);
 
   // Debounced values (only fire API after user stops typing)
   const debouncedIdSearch = useDebounce(idSearchInput, 350);
@@ -79,7 +89,7 @@ export default function MarketplacePage({ onSelectNode, isMobile, wallet, onConn
     } finally {
       setLoading(false);
     }
-  }, [sort, page, rarityFilter, debouncedMinPrice, debouncedMaxPrice, debouncedIdSearch]);
+  }, [sort, page, rarityFilter, debouncedMinPrice, debouncedMaxPrice, debouncedIdSearch, refreshKey]);
 
   useEffect(() => { loadListings(); }, [loadListings]);
 
@@ -93,11 +103,11 @@ export default function MarketplacePage({ onSelectNode, isMobile, wallet, onConn
     prevFiltersRef.current = key;
   }, [rarityFilter, debouncedMinPrice, debouncedMaxPrice, debouncedIdSearch, sort]);
 
-  // Fetch stats + activity on mount
+  // Fetch stats + activity on mount AND on every refresh
   useEffect(() => {
     fetchMarketplaceStats().then(setStats).catch(() => {});
     fetchMarketplaceActivity(30).then(setActivity).catch(() => {});
-  }, []);
+  }, [refreshKey]);
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
@@ -360,7 +370,7 @@ export default function MarketplacePage({ onSelectNode, isMobile, wallet, onConn
       {selectedListing && (
         <ListingDetail
           listing={selectedListing}
-          onClose={() => setSelectedListing(null)}
+          onClose={handleCloseDetail}
           onSelectNode={onSelectNode}
           isMobile={isMobile}
           wallet={wallet}

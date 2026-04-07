@@ -10,12 +10,14 @@ import CreateListing from './CreateListing';
  * Shows collection, active listings, offers made, and activity.
  */
 const TAB_MAP = {
-  profile: 'collected', collected: 'collected',
-  listings: 'listed', listed: 'listed',
+  profile: 'collected',
+  collected: 'collected',
+  listings: 'listed',
+  listed: 'listed',
   offers: 'offers',
   favorites: 'favorites',
-  settings: 'settings',
   activity: 'activity',
+  settings: 'settings',
 };
 
 export default function ProfilePage({ wallet, onClose, onSelectNode, isMobile, initialTab }) {
@@ -28,7 +30,8 @@ export default function ProfilePage({ wallet, onClose, onSelectNode, isMobile, i
 
   const [nodes, setNodes] = useState([]);
   const [listings, setListings] = useState([]);
-  const [offers, setOffers] = useState([]);
+  const [offers, setOffers] = useState([]);          // offers I made
+  const [receivedOffers, setReceivedOffers] = useState([]); // offers others made on me
   const [salesHistory, setSalesHistory] = useState([]);
   const [mpStats, setMpStats] = useState(null);
   const [walletData, setWalletData] = useState(null);
@@ -80,6 +83,7 @@ export default function ProfilePage({ wallet, onClose, onSelectNode, isMobile, i
       setNodes(merged);
       setListings(mData.activeListings || []);
       setOffers(mData.activeOffers || []);
+      setReceivedOffers(mData.receivedOffers || []);
       setSalesHistory(mData.salesHistory || []);
       setMpStats(mData.stats || null);
       setLoading(false);
@@ -139,7 +143,7 @@ export default function ProfilePage({ wallet, onClose, onSelectNode, isMobile, i
   const tabs = [
     { id: 'collected', label: 'Collected', count: nodes.length },
     { id: 'listed', label: 'Listed', count: listings.length },
-    { id: 'offers', label: 'Offers', count: offers.length },
+    { id: 'offers', label: 'Offers', count: (offers.length + receivedOffers.length) || null },
     { id: 'favorites', label: 'Favorites', count: null },
     { id: 'activity', label: 'Activity', count: salesHistory.length || null },
     { id: 'settings', label: 'Settings', count: null },
@@ -244,7 +248,7 @@ export default function ProfilePage({ wallet, onClose, onSelectNode, isMobile, i
         ) : tab === 'listed' ? (
           <ListedGrid listings={listings} isMobile={isMobile} onOpen={handleOpenNode} />
         ) : tab === 'offers' ? (
-          <OffersTab offers={offers} wallet={wallet} onOpen={handleOpenNode} />
+          <OffersTab offers={offers} receivedOffers={receivedOffers} wallet={wallet} onOpen={handleOpenNode} />
         ) : tab === 'favorites' ? (
           <FavoritesTab />
         ) : tab === 'settings' ? (
@@ -397,42 +401,117 @@ function ListedGrid({ listings, isMobile, onOpen }) {
   );
 }
 
-function OffersTab({ offers, wallet, onOpen }) {
-  if (offers.length === 0) return <EmptyState text="No active offers. Browse the marketplace to make one." />;
+function OffersTab({ offers, receivedOffers, wallet, onOpen }) {
+  // Default to Received if there are any (since those need action), otherwise Made
+  const [subTab, setSubTab] = useState(receivedOffers.length > 0 ? 'received' : 'made');
+
   return (
     <div style={{ maxWidth: 700 }}>
-      {offers.map((o, i) => {
-        const rc = RARITY_CONFIG[o.rarity]?.color || '#778';
-        const expired = o.expiresAt && new Date(o.expiresAt) < new Date();
-        return (
-          <div key={i}
-            onClick={() => onOpen?.({ listingId: o.listingId, tokenId: o.tokenId, rarity: o.rarity, status: 'Active' })}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 12,
-              padding: '12px 14px', marginBottom: 6,
-              background: '#0a140a', border: '1px solid #142014', borderRadius: 8,
-              opacity: expired ? 0.5 : 1, cursor: 'pointer', transition: 'all 0.15s',
-            }}
-            onMouseEnter={e => e.currentTarget.style.borderColor = '#60A5FA44'}
-            onMouseLeave={e => e.currentTarget.style.borderColor = '#142014'}
-          >
-            <img src={NODE_IMAGE_URL(o.tokenId)} alt={`#${o.tokenId}`}
-              style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', background: '#060b06' }} />
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#ddd' }}>#{o.tokenId}</div>
-              <span style={{ fontSize: 9, color: rc }}>{o.rarity}</span>
-            </div>
-            <div style={{ flex: 1 }} />
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: 8, color: '#445' }}>YOUR OFFER</div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: '#60A5FA' }}>{Number(o.amount).toFixed(2)} GUN</div>
-            </div>
-            <span style={{ fontSize: 9, color: expired ? '#EF4444' : '#334', minWidth: 70, textAlign: 'right' }}>
-              {expired ? 'EXPIRED' : `expires ${timeAgo(o.expiresAt)}`}
-            </span>
-          </div>
-        );
-      })}
+      {/* Subtabs */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid #0d180d' }}>
+        {[
+          { id: 'received', label: 'Received', count: receivedOffers.length, hint: 'Offers on your listings' },
+          { id: 'made', label: 'Made', count: offers.length, hint: 'Offers you made' },
+        ].map(s => (
+          <button key={s.id} onClick={() => setSubTab(s.id)} style={{
+            background: 'none', border: 'none',
+            borderBottom: subTab === s.id ? '2px solid #4ADE80' : '2px solid transparent',
+            color: subTab === s.id ? '#4ADE80' : '#556',
+            padding: '8px 16px', cursor: 'pointer', fontFamily: 'inherit',
+            fontSize: 11, fontWeight: 700, letterSpacing: 1,
+          }}>
+            {s.label.toUpperCase()}{s.count > 0 ? ` (${s.count})` : ''}
+          </button>
+        ))}
+      </div>
+
+      {subTab === 'received' ? (
+        receivedOffers.length === 0 ? (
+          <EmptyState text="No offers received. List an NFT to start receiving offers." />
+        ) : (
+          receivedOffers.map((o, i) => {
+            const rc = RARITY_CONFIG[o.rarity]?.color || '#778';
+            const expired = o.expiresAt && new Date(o.expiresAt) < new Date();
+            const listingPrice = Number(o.listingPrice) || 0;
+            const offerPct = listingPrice > 0 ? Math.round((Number(o.amount) / listingPrice) * 100) : 0;
+            return (
+              <div key={i}
+                onClick={() => onOpen?.({ listingId: o.listingId, tokenId: o.tokenId, rarity: o.rarity, status: 'Active' })}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '12px 14px', marginBottom: 6,
+                  background: '#0a140a', border: `1px solid ${expired ? '#142014' : '#4ADE8033'}`, borderRadius: 8,
+                  opacity: expired ? 0.5 : 1, cursor: 'pointer', transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = '#4ADE8088'}
+                onMouseLeave={e => e.currentTarget.style.borderColor = expired ? '#142014' : '#4ADE8033'}
+              >
+                <img src={NODE_IMAGE_URL(o.tokenId)} alt={`#${o.tokenId}`}
+                  style={{ width: 40, height: 40, borderRadius: 6, objectFit: 'cover', background: '#060b06' }} />
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#ddd' }}>#{o.tokenId}</div>
+                  <span style={{ fontSize: 9, color: rc }}>{o.rarity}</span>
+                </div>
+                <div style={{ flex: 1, textAlign: 'center' }}>
+                  <div style={{ fontSize: 8, color: '#445', letterSpacing: 1 }}>FROM</div>
+                  <div style={{ fontSize: 9, color: '#778' }}>{shortenAddr(o.bidder)}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 8, color: '#445' }}>OFFER</div>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: '#4ADE80' }}>{Number(o.amount).toFixed(2)} GUN</div>
+                  {listingPrice > 0 && (
+                    <div style={{ fontSize: 8, color: offerPct >= 90 ? '#4ADE80' : offerPct >= 70 ? '#FBBF24' : '#EF4444' }}>
+                      {offerPct}% of listing
+                    </div>
+                  )}
+                </div>
+                <button style={{
+                  background: '#4ADE8022', border: '1px solid #4ADE8055', borderRadius: 6,
+                  color: '#4ADE80', padding: '6px 12px', fontSize: 10, fontWeight: 800,
+                  fontFamily: 'inherit', cursor: 'pointer', letterSpacing: 1,
+                }}>VIEW</button>
+              </div>
+            );
+          })
+        )
+      ) : (
+        offers.length === 0 ? (
+          <EmptyState text="No active offers. Browse the marketplace to make one." />
+        ) : (
+          offers.map((o, i) => {
+            const rc = RARITY_CONFIG[o.rarity]?.color || '#778';
+            const expired = o.expiresAt && new Date(o.expiresAt) < new Date();
+            return (
+              <div key={i}
+                onClick={() => onOpen?.({ listingId: o.listingId, tokenId: o.tokenId, rarity: o.rarity, status: 'Active' })}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '12px 14px', marginBottom: 6,
+                  background: '#0a140a', border: '1px solid #142014', borderRadius: 8,
+                  opacity: expired ? 0.5 : 1, cursor: 'pointer', transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = '#60A5FA44'}
+                onMouseLeave={e => e.currentTarget.style.borderColor = '#142014'}
+              >
+                <img src={NODE_IMAGE_URL(o.tokenId)} alt={`#${o.tokenId}`}
+                  style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', background: '#060b06' }} />
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#ddd' }}>#{o.tokenId}</div>
+                  <span style={{ fontSize: 9, color: rc }}>{o.rarity}</span>
+                </div>
+                <div style={{ flex: 1 }} />
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 8, color: '#445' }}>YOUR OFFER</div>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: '#60A5FA' }}>{Number(o.amount).toFixed(2)} GUN</div>
+                </div>
+                <span style={{ fontSize: 9, color: expired ? '#EF4444' : '#334', minWidth: 70, textAlign: 'right' }}>
+                  {expired ? 'EXPIRED' : `expires ${timeAgo(o.expiresAt)}`}
+                </span>
+              </div>
+            );
+          })
+        )
+      )}
     </div>
   );
 }

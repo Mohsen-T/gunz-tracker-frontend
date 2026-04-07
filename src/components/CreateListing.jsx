@@ -3,6 +3,7 @@ import { RARITY_CONFIG, NODE_IMAGE_URL, GUNZ_LICENSE_CONTRACT } from '../utils/c
 import { formatNum, shortenAddr } from '../utils/format';
 import { fetchWallet, fetchWalletMarketplace } from '../services/api';
 import { approveNft, listNft, checkApproval } from '../services/marketplace';
+import { useToast } from './Toast';
 
 /**
  * OpenSea-style listing flow wired to real contract calls:
@@ -12,6 +13,7 @@ import { approveNft, listNft, checkApproval } from '../services/marketplace';
  *   Step 4: Approve tx → List tx → Success
  */
 export default function CreateListing({ onClose, isMobile, walletAddress }) {
+  const toast = useToast();
   const [nodes, setNodes] = useState([]);
   const [selectedNode, setSelectedNode] = useState(null);
   const [price, setPrice] = useState('');
@@ -71,10 +73,10 @@ export default function CreateListing({ onClose, isMobile, walletAddress }) {
   const handleList = async () => {
     setStep(4);
     setTxError(null);
-    // Use the contract address attached to the selected NFT (MockNFT for locally
-    // bought NFTs, real Hacker License for tracker-derived NFTs)
     const nftContract = selectedNode.nftContract || GUNZ_LICENSE_CONTRACT;
     const tokenId = selectedNode.id;
+
+    const pendingId = toast.pending('Listing NFT...', `Confirming approval & listing for Node #${tokenId}`);
 
     try {
       // Phase 1: Check approval, approve if needed
@@ -90,10 +92,19 @@ export default function CreateListing({ onClose, isMobile, walletAddress }) {
       setTxHash(result.hash);
       setListingId(result.listingId);
       setTxPhase('done');
+      toast.dismiss(pendingId);
+      toast.success(
+        'Listed!',
+        `Node #${tokenId} is now on sale for ${price} GUN`,
+        { txHash: result.hash, duration: 6000 }
+      );
     } catch (err) {
       console.error('Listing failed:', err);
-      setTxError(err.code === 'ACTION_REJECTED' ? 'Transaction rejected in wallet' : (err.reason || err.message || 'Transaction failed'));
+      const msg = err.code === 'ACTION_REJECTED' ? 'Transaction rejected in wallet' : (err.reason || err.message || 'Transaction failed');
+      setTxError(msg);
       setTxPhase('error');
+      toast.dismiss(pendingId);
+      toast.error('Listing failed', msg, { duration: 8000 });
     }
   };
 

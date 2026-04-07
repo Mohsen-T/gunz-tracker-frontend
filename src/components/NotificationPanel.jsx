@@ -6,7 +6,7 @@ import { fetchNotifications, markNotificationsRead } from '../services/api';
 /**
  * Notification dropdown panel wired to backend API.
  */
-export default function NotificationPanel({ onClose, isMobile, wallet }) {
+export default function NotificationPanel({ onClose, isMobile, wallet, onNavigate }) {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [tab, setTab] = useState('all');
@@ -99,8 +99,22 @@ export default function NotificationPanel({ onClose, isMobile, wallet }) {
         ) : (
           filtered.map(n => {
             const cfg = typeConfig[n.type] || { icon: '•', color: '#556' };
+            // Map notification types to profile views
+            const navTarget =
+              n.type === 'offer' ? 'offers' :          // someone offered on your listing
+              n.type === 'offer_accepted' ? 'offers' : // your offer accepted
+              n.type === 'sale' ? 'activity' :         // your listing sold
+              n.type === 'purchase' ? 'collected' :    // you bought
+              n.type === 'listing' ? 'listed' : null;
+            const handleClick = () => {
+              if (!n.isRead) markOneRead(n.id);
+              if (navTarget && onNavigate) {
+                onNavigate(navTarget);
+                onClose?.();
+              }
+            };
             return (
-              <div key={n.id} onClick={() => !n.isRead && markOneRead(n.id)} style={{
+              <div key={n.id} onClick={handleClick} style={{
                 display: 'flex', alignItems: 'flex-start', gap: 10,
                 padding: '12px 16px', borderBottom: '1px solid #0a140a',
                 background: n.isRead ? 'transparent' : '#0a180a08',

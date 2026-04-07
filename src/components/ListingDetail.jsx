@@ -3,8 +3,10 @@ import { RARITY_CONFIG, NODE_IMAGE_URL, GUNZSCAN_NODE_URL } from '../utils/const
 import { formatNum, shortenAddr, timeAgo } from '../utils/format';
 import { fetchMarketplaceListing, fetchMarketplaceConfig } from '../services/api';
 import * as mp from '../services/marketplace';
+import { useToast } from './Toast';
 
 export default function ListingDetail({ listing: initialListing, onClose, onSelectNode, isMobile, wallet, onConnectWallet }) {
+  const toast = useToast();
   const [listing, setListing] = useState(initialListing);
   const [config, setConfig] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -41,63 +43,55 @@ export default function ListingDetail({ listing: initialListing, onClose, onSele
 
   // ─── Contract Actions ───
 
-  // After a successful tx, briefly show success then auto-close so the parent
-  // page (Profile or Marketplace) can refetch and reflect the new state.
-  const finishSuccess = (hash) => {
-    setTxResult({ ok: true, hash });
-    setTxPending(null);
-    setTimeout(() => onClose?.(), 1200);
-  };
-
-  const finishError = (err) => {
-    setTxResult({
-      ok: false,
-      error: err.code === 'ACTION_REJECTED' ? 'Rejected' : (err.reason || err.message),
-    });
-    setTxPending(null);
-  };
-
-  const handleBuy = async () => {
-    setTxPending('buy'); setTxResult(null);
+  // Run a tx with full lifecycle: pending toast → success/error toast → close modal
+  const runTx = async (kind, label, fn) => {
+    setTxPending(kind); setTxResult(null);
+    const pendingId = toast.pending(`${label}...`, 'Confirm in your wallet');
     try {
-      const result = await mp.buyNft(listing.listingId, String(listing.price));
-      finishSuccess(result.hash);
-    } catch (err) { finishError(err); }
+      const result = await fn();
+      toast.dismiss(pendingId);
+      setTxResult({ ok: true, hash: result.hash });
+      setTxPending(null);
+      toast.success(
+        `${label} successful`,
+        `Node #${listing.tokenId} — view in your profile`,
+        { txHash: result.hash, duration: 6000 }
+      );
+      // Close modal after a brief delay so user sees the inline confirmation too
+      setTimeout(() => onClose?.(), 800);
+      return result;
+    } catch (err) {
+      toast.dismiss(pendingId);
+      const msg = err.code === 'ACTION_REJECTED' ? 'Rejected in wallet' : (err.reason || err.message || 'Transaction failed');
+      setTxResult({ ok: false, error: msg });
+      setTxPending(null);
+      toast.error(`${label} failed`, msg, { duration: 8000 });
+    }
   };
+
+  const handleBuy = () => runTx('buy', 'Buy', () =>
+    mp.buyNft(listing.listingId, String(listing.price))
+  );
 
   const handlePlaceOffer = async () => {
     if (!offerValid) return;
-    setTxPending('offer'); setTxResult(null);
-    try {
-      const result = await mp.placeOffer(listing.listingId, offerAmount);
-      setOfferAmount(''); setShowOfferInput(false);
-      finishSuccess(result.hash);
-    } catch (err) { finishError(err); }
+    const result = await runTx('offer', 'Offer placed', () =>
+      mp.placeOffer(listing.listingId, offerAmount)
+    );
+    if (result) { setOfferAmount(''); setShowOfferInput(false); }
   };
 
-  const handleCancel = async () => {
-    setTxPending('cancel'); setTxResult(null);
-    try {
-      const result = await mp.cancelListing(listing.listingId, String(cancelPenalty));
-      finishSuccess(result.hash);
-    } catch (err) { finishError(err); }
-  };
+  const handleCancel = () => runTx('cancel', 'Listing cancelled', () =>
+    mp.cancelListing(listing.listingId, String(cancelPenalty))
+  );
 
-  const handleAcceptOffer = async (offerId) => {
-    setTxPending('accept'); setTxResult(null);
-    try {
-      const result = await mp.acceptOffer(offerId);
-      finishSuccess(result.hash);
-    } catch (err) { finishError(err); }
-  };
+  const handleAcceptOffer = (offerId) => runTx('accept', 'Offer accepted', () =>
+    mp.acceptOffer(offerId)
+  );
 
-  const handleWithdrawOffer = async (offerId) => {
-    setTxPending('withdraw'); setTxResult(null);
-    try {
-      const result = await mp.withdrawOffer(offerId);
-      finishSuccess(result.hash);
-    } catch (err) { finishError(err); }
-  };
+  const handleWithdrawOffer = (offerId) => runTx('withdraw', 'Offer withdrawn', () =>
+    mp.withdrawOffer(offerId)
+  );
 
   // ─── Transaction status banner ───
   const TxBanner = () => {

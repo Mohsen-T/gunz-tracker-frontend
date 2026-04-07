@@ -163,6 +163,7 @@ function ConnectedBar({ wallet, isMobile, activeOverlay, onSetOverlay }) {
             onClose={() => onSetOverlay(null)}
             isMobile={isMobile}
             wallet={wallet}
+            onNavigate={(target) => onSetOverlay(target)}
           />
         )}
       </div>
