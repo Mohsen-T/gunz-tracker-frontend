@@ -38,7 +38,8 @@ export default function CreateListing({ onClose, isMobile, walletAddress }) {
       const activeListedIds = new Set((mData.activeListings || []).map(l => String(l.tokenId)));
 
       const trackerIds = new Set(trackerNodes.map(n => String(n.id)));
-      const merged = [...trackerNodes];
+      // Tracker NFTs default to the real Hacker License contract
+      const merged = trackerNodes.map(n => ({ ...n, nftContract: GUNZ_LICENSE_CONTRACT }));
       for (const o of ownedFromMp) {
         if (!trackerIds.has(String(o.id))) {
           merged.push({
@@ -47,6 +48,8 @@ export default function CreateListing({ onClose, isMobile, walletAddress }) {
             hashpower: o.hashpower || 0,
             hexesDecoded: o.hexesDecoded || 0,
             activity: o.activity || 'Active',
+            // Use the actual NFT contract from the marketplace sale (e.g. MockNFT on local)
+            nftContract: o.nftContract || GUNZ_LICENSE_CONTRACT,
           });
         }
       }
@@ -63,7 +66,9 @@ export default function CreateListing({ onClose, isMobile, walletAddress }) {
   const handleList = async () => {
     setStep(4);
     setTxError(null);
-    const nftContract = GUNZ_LICENSE_CONTRACT;
+    // Use the contract address attached to the selected NFT (MockNFT for locally
+    // bought NFTs, real Hacker License for tracker-derived NFTs)
+    const nftContract = selectedNode.nftContract || GUNZ_LICENSE_CONTRACT;
     const tokenId = selectedNode.id;
 
     try {

@@ -59,7 +59,7 @@ export default function ProfilePage({ wallet, onClose, onSelectNode, isMobile, i
       const trackerNodes = wData.nodes || [];
       const ownedFromMp = mData.ownedNfts || [];
       const trackerIds = new Set(trackerNodes.map(n => String(n.id)));
-      const merged = [...trackerNodes];
+      const merged = trackerNodes.map(n => ({ ...n, nftContract: GUNZ_LICENSE_CONTRACT }));
       for (const o of ownedFromMp) {
         if (!trackerIds.has(String(o.id))) {
           merged.push({
@@ -68,6 +68,7 @@ export default function ProfilePage({ wallet, onClose, onSelectNode, isMobile, i
             hashpower: o.hashpower || 0,
             hexesDecoded: o.hexesDecoded || 0,
             activity: o.activity || 'Active',
+            nftContract: o.nftContract || GUNZ_LICENSE_CONTRACT,
             _fromMarketplace: true,
           });
         }
