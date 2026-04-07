@@ -18,6 +18,9 @@ import ConnectWalletModal from './components/ConnectWalletModal';
 import CreateListing from './components/CreateListing';
 import WalletPanel from './components/WalletPanel';
 import ProfilePage from './components/ProfilePage';
+import MarketplaceSubNav from './components/MarketplaceSubNav';
+import { useEffect } from 'react';
+import { fetchWalletMarketplace } from './services/api';
 
 export default function App() {
   const [page, setPage] = useState('home');
@@ -44,6 +47,32 @@ export default function App() {
    */
   const [activeOverlay, setActiveOverlay] = useState(null);
   const [profileView, setProfileView] = useState(null);
+
+  // Counts for the marketplace sub-nav badges
+  const [offerCounts, setOfferCounts] = useState({ received: 0, made: 0 });
+
+  // Poll the wallet's offer counts so the SubNav badge stays accurate
+  useEffect(() => {
+    if (!wallet?.isConnected || !wallet?.address) {
+      setOfferCounts({ received: 0, made: 0 });
+      return;
+    }
+    let cancelled = false;
+    const load = () => {
+      fetchWalletMarketplace(wallet.address)
+        .then(d => {
+          if (cancelled) return;
+          setOfferCounts({
+            received: (d.receivedOffers || []).length,
+            made: (d.activeOffers || []).length,
+          });
+        })
+        .catch(() => {});
+    };
+    load();
+    const interval = setInterval(load, 30000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [wallet?.isConnected, wallet?.address]);
 
   const closeAllOverlays = useCallback(() => setActiveOverlay(null), []);
 
@@ -135,7 +164,34 @@ export default function App() {
         activeOverlay={activeOverlay} onSetOverlay={handleSetOverlay}
       />
 
-      {/* Profile page (from account menu) */}
+      {/* Marketplace sub-nav: quick access to profile sections */}
+      {page === 'marketplace' && (
+        <MarketplaceSubNav
+          isMobile={isMobile}
+          wallet={wallet}
+          currentSection={
+            showProfilePage
+              ? (profileView === 'collected' || profileView === 'profile' ? 'collected'
+                : profileView === 'listed' || profileView === 'listings' ? 'listed'
+                : profileView === 'offers' ? 'offers'
+                : profileView === 'activity' ? 'activity'
+                : null)
+              : 'browse'
+          }
+          receivedOffersCount={offerCounts.received}
+          madeOffersCount={offerCounts.made}
+          onNavigate={(target) => {
+            if (target === 'browse') {
+              setProfileView(null);
+            } else {
+              if (!wallet.isConnected) { setActiveOverlay('connectWallet'); return; }
+              setProfileView(target);
+            }
+          }}
+        />
+      )}
+
+      {/* Profile page (from account menu or sub-nav) */}
       {showProfilePage && wallet.isConnected ? (
         <ProfilePage
           wallet={wallet} isMobile={isMobile}

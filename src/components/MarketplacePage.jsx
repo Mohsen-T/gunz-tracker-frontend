@@ -45,7 +45,6 @@ export default function MarketplacePage({ onSelectNode, isMobile, wallet, onConn
   const [idSearchInput, setIdSearchInput] = useState('');
   const [page, setPage] = useState(0);
   const [selectedListing, setSelectedListing] = useState(null);
-  const [tab, setTab] = useState('browse');
   const [refreshKey, setRefreshKey] = useState(0);
 
   const refresh = useCallback(() => setRefreshKey(k => k + 1), []);
@@ -174,26 +173,10 @@ export default function MarketplacePage({ onSelectNode, isMobile, wallet, onConn
         </button>
       </div>
 
-      {/* ── Tab Switcher ── */}
-      <div style={{
-        display: 'flex', gap: 0, borderBottom: '1px solid #142014', flexShrink: 0,
-        background: '#060b06',
-      }}>
-        {['browse', 'activity'].map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{
-            background: tab === t ? '#0a140a' : 'transparent',
-            border: 'none', borderBottom: tab === t ? '2px solid #4ADE80' : '2px solid transparent',
-            color: tab === t ? '#4ADE80' : '#556',
-            padding: '8px 20px', cursor: 'pointer', fontFamily: 'inherit',
-            fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase',
-          }}>
-            {t === 'browse' ? 'BROWSE' : 'ACTIVITY'}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'browse' ? (
-        <>
+      {/* ── 2-column layout: Browse (left) + Activity (right) ── */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        {/* Left: Browse */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
           {/* ── Filters Bar ── */}
           <div style={{
             padding: isMobile ? '8px 10px' : '8px 20px',
@@ -361,10 +344,21 @@ export default function MarketplacePage({ onSelectNode, isMobile, wallet, onConn
               </>
             )}
           </div>
-        </>
-      ) : (
-        <ActivityFeed activity={activity} isMobile={isMobile} wallet={wallet} />
-      )}
+        </div>
+        {/* Right: Activity sidebar */}
+        {!isMobile && (
+          <div style={{
+            width: 320, flexShrink: 0, borderLeft: '1px solid #142014',
+            background: '#060b06', display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          }}>
+            <div style={{
+              padding: '10px 16px', borderBottom: '1px solid #0d180d',
+              fontSize: 11, fontWeight: 800, color: '#4ADE80', letterSpacing: 2,
+            }}>ACTIVITY</div>
+            <ActivityFeed activity={activity} isMobile={isMobile} wallet={wallet} compact />
+          </div>
+        )}
+      </div>
 
       {/* Listing Detail Overlay */}
       {selectedListing && (
@@ -526,7 +520,7 @@ function ListingCard({ listing, isMobile, onClick }) {
 
 // ─── Activity Feed ───
 
-function ActivityFeed({ activity, isMobile, wallet }) {
+function ActivityFeed({ activity, isMobile, wallet, compact = false }) {
   const myAddr = wallet?.address?.toLowerCase() || '';
 
   const typeConfig = {
@@ -537,21 +531,49 @@ function ActivityFeed({ activity, isMobile, wallet }) {
   };
 
   return (
-    <div style={{ flex: 1, overflow: 'auto', padding: isMobile ? 8 : 16 }}>
+    <div style={{ flex: 1, overflow: 'auto', padding: compact ? 8 : (isMobile ? 8 : 16) }}>
       {activity.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 60, color: '#445', fontSize: 12 }}>
+        <div style={{ textAlign: 'center', padding: 40, color: '#445', fontSize: 11 }}>
           No marketplace activity yet
         </div>
       ) : (
-        <div style={{ maxWidth: 700, margin: '0 auto' }}>
+        <div style={{ maxWidth: compact ? '100%' : 700, margin: '0 auto' }}>
           {activity.map((a, i) => {
-            // Wallet-aware label: show BOUGHT for sales where the connected wallet is the buyer
             let cfgKey = a.type;
             if (a.type === 'sale' && myAddr && a.buyer && myAddr === a.buyer.toLowerCase()) {
               cfgKey = 'bought';
             }
             const cfg = typeConfig[cfgKey] || typeConfig.listing;
             const rarityColor = RARITY_CONFIG[a.rarity]?.color || '#778';
+
+            if (compact) {
+              // Compact sidebar layout: stacked, no actor, narrow
+              return (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '8px 6px', borderBottom: '1px solid #0d180d',
+                }}>
+                  <div style={{
+                    background: cfg.color + '15', border: `1px solid ${cfg.color}33`,
+                    borderRadius: 3, padding: '2px 5px',
+                    fontSize: 7, fontWeight: 800, color: cfg.color, letterSpacing: 1,
+                    flexShrink: 0,
+                  }}>{cfg.label}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#ddd' }}>#{a.tokenId}</div>
+                    {a.rarity && <div style={{ fontSize: 8, color: rarityColor }}>{a.rarity}</div>}
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#4ADE80' }}>
+                      {a.price ? `${Number(a.price).toFixed(1)}` : '—'}
+                    </div>
+                    <div style={{ fontSize: 7, color: '#334' }}>{timeAgo(a.timestamp)}</div>
+                  </div>
+                </div>
+              );
+            }
+
+            // Default (mobile / standalone) layout
             return (
               <div key={i} style={{
                 display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12,
