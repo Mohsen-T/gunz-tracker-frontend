@@ -310,6 +310,28 @@ export async function listNft(nftContract, tokenId, priceGun) {
  */
 export async function buyNft(listingId, priceGun) {
   const { parseEther } = await getEthers();
+
+  // Precheck: verify listing is active on-chain (DB may be stale after reset)
+  const mpRead = await getMarketplaceContract(false);
+  try {
+    const listing = await mpRead.getListing(BigInt(listingId));
+    if (Number(listing.status) !== 0) {
+      throw new Error(
+        `Listing #${listingId} is not active on-chain (status=${listing.status}). ` +
+        `DB is out of sync — re-run reset-local.js + seed-db.js to refresh local state.`
+      );
+    }
+    if (listing.seller === '0x0000000000000000000000000000000000000000') {
+      throw new Error(
+        `Listing #${listingId} doesn't exist on-chain. The marketplace contract may have been redeployed. ` +
+        `Re-run reset-local.js + seed-db.js.`
+      );
+    }
+  } catch (err) {
+    if (err.message?.startsWith('Listing #')) throw err;
+    throw new Error(`Failed to read listing from contract: ${err.message}`);
+  }
+
   const mp = await getMarketplaceContract(true);
   const tx = await mp.buy(BigInt(listingId), { value: parseEther(String(priceGun)) });
   const receipt = await tx.wait();
