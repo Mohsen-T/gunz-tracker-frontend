@@ -353,7 +353,7 @@ export default function MarketplacePage({ onSelectNode, isMobile, wallet, onConn
           </div>
         </>
       ) : (
-        <ActivityFeed activity={activity} isMobile={isMobile} />
+        <ActivityFeed activity={activity} isMobile={isMobile} wallet={wallet} />
       )}
 
       {/* Listing Detail Overlay */}
@@ -516,10 +516,13 @@ function ListingCard({ listing, isMobile, onClick }) {
 
 // ─── Activity Feed ───
 
-function ActivityFeed({ activity, isMobile }) {
+function ActivityFeed({ activity, isMobile, wallet }) {
+  const myAddr = wallet?.address?.toLowerCase() || '';
+
   const typeConfig = {
     listing: { label: 'LISTED', color: '#60A5FA' },
     sale: { label: 'SOLD', color: '#4ADE80' },
+    bought: { label: 'BOUGHT', color: '#60A5FA' },
     cancel: { label: 'CANCELLED', color: '#EF4444' },
   };
 
@@ -532,7 +535,12 @@ function ActivityFeed({ activity, isMobile }) {
       ) : (
         <div style={{ maxWidth: 700, margin: '0 auto' }}>
           {activity.map((a, i) => {
-            const cfg = typeConfig[a.type] || typeConfig.listing;
+            // Wallet-aware label: show BOUGHT for sales where the connected wallet is the buyer
+            let cfgKey = a.type;
+            if (a.type === 'sale' && myAddr && a.buyer && myAddr === a.buyer.toLowerCase()) {
+              cfgKey = 'bought';
+            }
+            const cfg = typeConfig[cfgKey] || typeConfig.listing;
             const rarityColor = RARITY_CONFIG[a.rarity]?.color || '#778';
             return (
               <div key={i} style={{
