@@ -7,6 +7,22 @@
 import { MARKETPLACE_ABI } from './marketplaceAbi';
 import { GUNZ_MARKETPLACE_CONTRACT, GUNZ_LICENSE_CONTRACT, GUNZ_GAME_ITEM_CONTRACT, GUNZ_RPC_URL } from '../utils/constants';
 
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
+// Notify backend of a successful on-chain action so the DB stays in sync.
+// (Local Hardhat doesn't get indexed by the GunzScan-based marketplaceSync.)
+async function reportToBackend(type, data) {
+  try {
+    await fetch(`${API_BASE}/api/marketplace/local-sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, ...data }),
+    });
+  } catch (err) {
+    console.warn('[marketplace] backend sync failed:', err.message);
+  }
+}
+
 const ERC721_ABI = [
   'function approve(address to, uint256 tokenId)',
   'function setApprovalForAll(address operator, bool approved)',
@@ -170,16 +186,25 @@ export async function listNft(nftContract, tokenId, priceGun) {
   const tx = await mp.list(nftContract, BigInt(tokenId), parseEther(String(priceGun)));
   const receipt = await tx.wait();
 
-  // Parse listingId from Listed event
+  // Parse Listed event
   let listingId = null;
+  let seller = null;
   for (const log of receipt.logs) {
     try {
       const parsed = mp.interface.parseLog({ topics: log.topics, data: log.data });
       if (parsed?.name === 'Listed') {
         listingId = Number(parsed.args.listingId);
+        seller = parsed.args.seller;
         break;
       }
     } catch {}
+  }
+
+  if (listingId != null) {
+    await reportToBackend('listed', {
+      listingId, nftContract, tokenId: String(tokenId),
+      seller, price: priceGun, txHash: receipt.hash,
+    });
   }
 
   return { hash: receipt.hash, listingId };
@@ -196,6 +221,24 @@ export async function buyNft(listingId, priceGun) {
   const mp = await getMarketplaceContract(true);
   const tx = await mp.buy(BigInt(listingId), { value: parseEther(String(priceGun)) });
   const receipt = await tx.wait();
+
+  // Parse Sale event for buyer + fee
+  let buyer = null, fee = '0';
+  for (const log of receipt.logs) {
+    try {
+      const parsed = mp.interface.parseLog({ topics: log.topics, data: log.data });
+      if (parsed?.name === 'Sale') {
+        buyer = parsed.args.buyer;
+        fee = (Number(parsed.args.fee) / 1e18).toString();
+        break;
+      }
+    } catch {}
+  }
+
+  await reportToBackend('sale', {
+    listingId, buyer, price: priceGun, fee, txHash: receipt.hash,
+  });
+
   return { hash: receipt.hash };
 }
 
@@ -210,6 +253,11 @@ export async function cancelListing(listingId, penaltyGun) {
   const mp = await getMarketplaceContract(true);
   const tx = await mp.cancelListing(BigInt(listingId), { value: parseEther(String(penaltyGun)) });
   const receipt = await tx.wait();
+
+  await reportToBackend('cancelled', {
+    listingId, penalty: penaltyGun, txHash: receipt.hash,
+  });
+
   return { hash: receipt.hash };
 }
 
@@ -259,15 +307,23 @@ export async function placeOffer(listingId, amountGun) {
   const tx = await mp.placeOffer(BigInt(listingId), { value: parseEther(String(amountGun)) });
   const receipt = await tx.wait();
 
-  let offerId = null;
+  let offerId = null, bidder = null, expiresAt = null;
   for (const log of receipt.logs) {
     try {
       const parsed = mp.interface.parseLog({ topics: log.topics, data: log.data });
       if (parsed?.name === 'OfferPlaced') {
         offerId = Number(parsed.args.offerId);
+        bidder = parsed.args.bidder;
+        expiresAt = Number(parsed.args.expiresAt) * 1000;
         break;
       }
     } catch {}
+  }
+
+  if (offerId != null) {
+    await reportToBackend('offer-placed', {
+      offerId, listingId, bidder, amount: amountGun, expiresAt, txHash: receipt.hash,
+    });
   }
 
   return { hash: receipt.hash, offerId };
@@ -282,6 +338,28 @@ export async function acceptOffer(offerId) {
   const mp = await getMarketplaceContract(true);
   const tx = await mp.acceptOffer(BigInt(offerId));
   const receipt = await tx.wait();
+
+  // Parse OfferAccepted for full details
+  let listingId = null, bidder = null, amount = '0', fee = '0';
+  for (const log of receipt.logs) {
+    try {
+      const parsed = mp.interface.parseLog({ topics: log.topics, data: log.data });
+      if (parsed?.name === 'OfferAccepted') {
+        listingId = Number(parsed.args.listingId);
+        bidder = parsed.args.bidder;
+        amount = (Number(parsed.args.amount) / 1e18).toString();
+        fee = (Number(parsed.args.fee) / 1e18).toString();
+        break;
+      }
+    } catch {}
+  }
+
+  if (listingId != null) {
+    await reportToBackend('offer-accepted', {
+      offerId, listingId, bidder, amount, fee, txHash: receipt.hash,
+    });
+  }
+
   return { hash: receipt.hash };
 }
 
@@ -294,5 +372,10 @@ export async function withdrawOffer(offerId) {
   const mp = await getMarketplaceContract(true);
   const tx = await mp.withdrawOffer(BigInt(offerId));
   const receipt = await tx.wait();
+
+  await reportToBackend('offer-withdrawn', {
+    offerId, txHash: receipt.hash,
+  });
+
   return { hash: receipt.hash };
 }
