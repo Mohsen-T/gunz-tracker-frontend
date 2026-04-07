@@ -37,20 +37,25 @@ export default function CreateListing({ onClose, isMobile, walletAddress }) {
       const ownedFromMp = mData.ownedNfts || [];
       const activeListedIds = new Set((mData.activeListings || []).map(l => String(l.tokenId)));
 
-      const trackerIds = new Set(trackerNodes.map(n => String(n.id)));
-      // Tracker NFTs default to the real Hacker License contract
-      const merged = trackerNodes.map(n => ({ ...n, nftContract: GUNZ_LICENSE_CONTRACT }));
+      // Marketplace-acquired NFTs WIN over tracker NFTs on tokenId collision,
+      // because they reflect actual on-chain ownership (local MockNFT vs forked mainnet).
+      const mpIds = new Set(ownedFromMp.map(o => String(o.id)));
+      const merged = [];
+      // 1) Add marketplace-acquired NFTs first (with their real contract address)
       for (const o of ownedFromMp) {
-        if (!trackerIds.has(String(o.id))) {
-          merged.push({
-            id: o.id,
-            rarity: o.rarity || 'Common',
-            hashpower: o.hashpower || 0,
-            hexesDecoded: o.hexesDecoded || 0,
-            activity: o.activity || 'Active',
-            // Use the actual NFT contract from the marketplace sale (e.g. MockNFT on local)
-            nftContract: o.nftContract || GUNZ_LICENSE_CONTRACT,
-          });
+        merged.push({
+          id: o.id,
+          rarity: o.rarity || 'Common',
+          hashpower: o.hashpower || 0,
+          hexesDecoded: o.hexesDecoded || 0,
+          activity: o.activity || 'Active',
+          nftContract: o.nftContract || GUNZ_LICENSE_CONTRACT,
+        });
+      }
+      // 2) Then add tracker NFTs that aren't already covered
+      for (const n of trackerNodes) {
+        if (!mpIds.has(String(n.id))) {
+          merged.push({ ...n, nftContract: GUNZ_LICENSE_CONTRACT });
         }
       }
       // Filter out NFTs that are currently listed

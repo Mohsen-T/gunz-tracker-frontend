@@ -58,19 +58,23 @@ export default function ProfilePage({ wallet, onClose, onSelectNode, isMobile, i
       // the user purchased via the marketplace (and haven't re-sold).
       const trackerNodes = wData.nodes || [];
       const ownedFromMp = mData.ownedNfts || [];
-      const trackerIds = new Set(trackerNodes.map(n => String(n.id)));
-      const merged = trackerNodes.map(n => ({ ...n, nftContract: GUNZ_LICENSE_CONTRACT }));
+      // Marketplace-acquired NFTs WIN on tokenId collision (actual on-chain ownership)
+      const mpIds = new Set(ownedFromMp.map(o => String(o.id)));
+      const merged = [];
       for (const o of ownedFromMp) {
-        if (!trackerIds.has(String(o.id))) {
-          merged.push({
-            id: o.id,
-            rarity: o.rarity || 'Common',
-            hashpower: o.hashpower || 0,
-            hexesDecoded: o.hexesDecoded || 0,
-            activity: o.activity || 'Active',
-            nftContract: o.nftContract || GUNZ_LICENSE_CONTRACT,
-            _fromMarketplace: true,
-          });
+        merged.push({
+          id: o.id,
+          rarity: o.rarity || 'Common',
+          hashpower: o.hashpower || 0,
+          hexesDecoded: o.hexesDecoded || 0,
+          activity: o.activity || 'Active',
+          nftContract: o.nftContract || GUNZ_LICENSE_CONTRACT,
+          _fromMarketplace: true,
+        });
+      }
+      for (const n of trackerNodes) {
+        if (!mpIds.has(String(n.id))) {
+          merged.push({ ...n, nftContract: GUNZ_LICENSE_CONTRACT });
         }
       }
       setNodes(merged);

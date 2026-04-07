@@ -125,9 +125,31 @@ export async function getContractConfig() {
 
 /**
  * Check if NFT is approved for marketplace.
+ * Verifies the contract exists at the given address first.
  */
 export async function checkApproval(nftContract, tokenId, ownerAddress) {
+  // Sanity check: NFT contract must have code at this address
+  const provider = await getProvider();
+  const code = await provider.getCode(nftContract);
+  if (!code || code === '0x') {
+    throw new Error(
+      `No NFT contract at ${nftContract} — this token may belong to a deployment from a previous Hardhat session. ` +
+      `Reset your local DB or buy a fresh NFT to test listing.`
+    );
+  }
+
+  // Verify the user actually owns the token on this chain
   const nft = await getNftContract(nftContract);
+  try {
+    const owner = await nft.ownerOf(BigInt(tokenId));
+    if (owner.toLowerCase() !== ownerAddress.toLowerCase()) {
+      throw new Error(`You don't own token #${tokenId} on this chain. Owner is ${owner}.`);
+    }
+  } catch (err) {
+    if (err.message?.startsWith("You don't")) throw err;
+    throw new Error(`Failed to verify NFT ownership: token #${tokenId} may not exist on the chain.`);
+  }
+
   const approved = await nft.getApproved(BigInt(tokenId));
   if (approved.toLowerCase() === getMarketplaceAddress().toLowerCase()) return true;
   const approvedAll = await nft.isApprovedForAll(ownerAddress, getMarketplaceAddress());
