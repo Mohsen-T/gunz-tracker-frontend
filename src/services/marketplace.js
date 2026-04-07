@@ -235,7 +235,27 @@ export async function updateListingPrice(listingId, newPriceGun) {
  */
 export async function placeOffer(listingId, amountGun) {
   const { parseEther } = await getEthers();
+
+  // Sanity check: verify the marketplace contract exists at this address
+  const provider = await getProvider();
+  const code = await provider.getCode(getMarketplaceAddress());
+  if (!code || code === '0x') {
+    throw new Error(`No contract at ${getMarketplaceAddress()} — was your local node restarted? Re-deploy the marketplace.`);
+  }
+
   const mp = await getMarketplaceContract(true);
+
+  // Verify listing is active on-chain before placing offer
+  try {
+    const listing = await mp.getListing(BigInt(listingId));
+    if (Number(listing.status) !== 0) {
+      throw new Error(`Listing #${listingId} is not active on-chain (status=${listing.status}). DB may be out of sync — re-run setup-test.js and seed-db.js.`);
+    }
+  } catch (err) {
+    if (err.message?.startsWith('Listing #')) throw err;
+    throw new Error(`Failed to read listing from contract: ${err.message}`);
+  }
+
   const tx = await mp.placeOffer(BigInt(listingId), { value: parseEther(String(amountGun)) });
   const receipt = await tx.wait();
 
