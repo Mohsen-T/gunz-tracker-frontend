@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { RARITY_CONFIG, NODE_IMAGE_URL, GUNZ_LICENSE_CONTRACT } from '../utils/constants';
 import { formatNum, shortenAddr } from '../utils/format';
-import { fetchWallet } from '../services/api';
+import { fetchWallet, fetchWalletMarketplace } from '../services/api';
 import { approveNft, listNft, checkApproval } from '../services/marketplace';
 
 /**
@@ -27,9 +27,33 @@ export default function CreateListing({ onClose, isMobile, walletAddress }) {
   useEffect(() => {
     if (!walletAddress) return;
     setLoading(true);
-    fetchWallet(walletAddress)
-      .then(data => { setNodes(data.nodes || []); setLoading(false); })
-      .catch(() => { setNodes([]); setLoading(false); });
+    Promise.all([
+      fetchWallet(walletAddress).catch(() => ({ nodes: [] })),
+      fetchWalletMarketplace(walletAddress).catch(() => ({})),
+    ]).then(([wData, mData]) => {
+      // Merge tracker NFTs with marketplace-acquired NFTs.
+      // Exclude tokens that are currently listed (already in escrow, can't list again).
+      const trackerNodes = wData.nodes || [];
+      const ownedFromMp = mData.ownedNfts || [];
+      const activeListedIds = new Set((mData.activeListings || []).map(l => String(l.tokenId)));
+
+      const trackerIds = new Set(trackerNodes.map(n => String(n.id)));
+      const merged = [...trackerNodes];
+      for (const o of ownedFromMp) {
+        if (!trackerIds.has(String(o.id))) {
+          merged.push({
+            id: o.id,
+            rarity: o.rarity || 'Common',
+            hashpower: o.hashpower || 0,
+            hexesDecoded: o.hexesDecoded || 0,
+            activity: o.activity || 'Active',
+          });
+        }
+      }
+      // Filter out NFTs that are currently listed
+      setNodes(merged.filter(n => !activeListedIds.has(String(n.id))));
+      setLoading(false);
+    });
   }, [walletAddress]);
 
   const priceNum = parseFloat(price) || 0;

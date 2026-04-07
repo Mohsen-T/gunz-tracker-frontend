@@ -41,15 +41,28 @@ export default function ListingDetail({ listing: initialListing, onClose, onSele
 
   // ─── Contract Actions ───
 
+  // After a successful tx, briefly show success then auto-close so the parent
+  // page (Profile or Marketplace) can refetch and reflect the new state.
+  const finishSuccess = (hash) => {
+    setTxResult({ ok: true, hash });
+    setTxPending(null);
+    setTimeout(() => onClose?.(), 1200);
+  };
+
+  const finishError = (err) => {
+    setTxResult({
+      ok: false,
+      error: err.code === 'ACTION_REJECTED' ? 'Rejected' : (err.reason || err.message),
+    });
+    setTxPending(null);
+  };
+
   const handleBuy = async () => {
     setTxPending('buy'); setTxResult(null);
     try {
       const result = await mp.buyNft(listing.listingId, String(listing.price));
-      setTxResult({ ok: true, hash: result.hash });
-    } catch (err) {
-      setTxResult({ ok: false, error: err.code === 'ACTION_REJECTED' ? 'Rejected' : (err.reason || err.message) });
-    }
-    setTxPending(null);
+      finishSuccess(result.hash);
+    } catch (err) { finishError(err); }
   };
 
   const handlePlaceOffer = async () => {
@@ -57,45 +70,33 @@ export default function ListingDetail({ listing: initialListing, onClose, onSele
     setTxPending('offer'); setTxResult(null);
     try {
       const result = await mp.placeOffer(listing.listingId, offerAmount);
-      setTxResult({ ok: true, hash: result.hash });
       setOfferAmount(''); setShowOfferInput(false);
-    } catch (err) {
-      setTxResult({ ok: false, error: err.code === 'ACTION_REJECTED' ? 'Rejected' : (err.reason || err.message) });
-    }
-    setTxPending(null);
+      finishSuccess(result.hash);
+    } catch (err) { finishError(err); }
   };
 
   const handleCancel = async () => {
     setTxPending('cancel'); setTxResult(null);
     try {
       const result = await mp.cancelListing(listing.listingId, String(cancelPenalty));
-      setTxResult({ ok: true, hash: result.hash });
-    } catch (err) {
-      setTxResult({ ok: false, error: err.code === 'ACTION_REJECTED' ? 'Rejected' : (err.reason || err.message) });
-    }
-    setTxPending(null);
+      finishSuccess(result.hash);
+    } catch (err) { finishError(err); }
   };
 
   const handleAcceptOffer = async (offerId) => {
     setTxPending('accept'); setTxResult(null);
     try {
       const result = await mp.acceptOffer(offerId);
-      setTxResult({ ok: true, hash: result.hash });
-    } catch (err) {
-      setTxResult({ ok: false, error: err.code === 'ACTION_REJECTED' ? 'Rejected' : (err.reason || err.message) });
-    }
-    setTxPending(null);
+      finishSuccess(result.hash);
+    } catch (err) { finishError(err); }
   };
 
   const handleWithdrawOffer = async (offerId) => {
     setTxPending('withdraw'); setTxResult(null);
     try {
       const result = await mp.withdrawOffer(offerId);
-      setTxResult({ ok: true, hash: result.hash });
-    } catch (err) {
-      setTxResult({ ok: false, error: err.code === 'ACTION_REJECTED' ? 'Rejected' : (err.reason || err.message) });
-    }
-    setTxPending(null);
+      finishSuccess(result.hash);
+    } catch (err) { finishError(err); }
   };
 
   // ─── Transaction status banner ───
