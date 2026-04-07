@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
-import { RARITY_CONFIG, RARITY_ORDER, NODE_IMAGE_URL } from '../utils/constants';
+import { useState, useEffect, useCallback } from 'react';
+import { RARITY_CONFIG, RARITY_ORDER, NODE_IMAGE_URL, GUNZ_LICENSE_CONTRACT } from '../utils/constants';
 import { formatNum, shortenAddr, timeAgo } from '../utils/format';
-import { fetchWallet, fetchMarketplaceListings, fetchWalletMarketplace } from '../services/api';
+import { fetchWallet, fetchWalletMarketplace, fetchTokenMarketplace } from '../services/api';
+import ListingDetail from './ListingDetail';
+import CreateListing from './CreateListing';
 
 /**
  * User profile page (OpenSea-style).
@@ -19,11 +21,11 @@ const TAB_MAP = {
 export default function ProfilePage({ wallet, onClose, onSelectNode, isMobile, initialTab }) {
   const [tab, setTab] = useState(TAB_MAP[initialTab] || 'collected');
 
-  // Sync tab when menu navigates to a different profile view
   useEffect(() => {
     const mapped = TAB_MAP[initialTab];
     if (mapped) setTab(mapped);
   }, [initialTab]);
+
   const [nodes, setNodes] = useState([]);
   const [listings, setListings] = useState([]);
   const [offers, setOffers] = useState([]);
@@ -31,13 +33,24 @@ export default function ProfilePage({ wallet, onClose, onSelectNode, isMobile, i
   const [mpStats, setMpStats] = useState(null);
   const [walletData, setWalletData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
 
+  // Modals — for opening listing detail and create-listing flow
+  const [openListing, setOpenListing] = useState(null);   // listing object to view in ListingDetail
+  const [showCreateListing, setShowCreateListing] = useState(false);
+
+  const refresh = useCallback(() => setRefreshKey(k => k + 1), []);
+
+  // Refetch data on mount, tab change, and after every refresh trigger
   useEffect(() => {
     if (!wallet?.address) return;
+    let cancelled = false;
+    setLoading(true);
     Promise.all([
       fetchWallet(wallet.address).catch(() => ({ nodes: [] })),
       fetchWalletMarketplace(wallet.address).catch(() => ({})),
     ]).then(([wData, mData]) => {
+      if (cancelled) return;
       setWalletData(wData);
       setNodes(wData.nodes || []);
       setListings(mData.activeListings || []);
@@ -46,7 +59,50 @@ export default function ProfilePage({ wallet, onClose, onSelectNode, isMobile, i
       setMpStats(mData.stats || null);
       setLoading(false);
     });
-  }, [wallet?.address]);
+    return () => { cancelled = true; };
+  }, [wallet?.address, tab, refreshKey]);
+
+  // Open the listing detail for a token: looks up its active listing if any, else opens an "info-only" view
+  const handleOpenNode = useCallback(async (tokenIdOrListing) => {
+    // If it's already a listing object (has listingId), open directly
+    if (tokenIdOrListing?.listingId) {
+      setOpenListing(tokenIdOrListing);
+      return;
+    }
+    // Otherwise it's a node — try to find an active listing for it
+    const node = tokenIdOrListing;
+    try {
+      const data = await fetchTokenMarketplace(GUNZ_LICENSE_CONTRACT, node.id);
+      if (data?.activeListing) {
+        setOpenListing({
+          listingId: data.activeListing.listingId,
+          tokenId: node.id,
+          rarity: node.rarity,
+          price: data.activeListing.price,
+          seller: data.activeListing.seller,
+          status: 'Active',
+          createdAt: data.activeListing.createdAt,
+          hashpower: node.hashpower,
+          hexesDecoded: node.hexesDecoded,
+        });
+      } else {
+        // No active listing — fall through to node detail (tracker)
+        onSelectNode?.(node);
+      }
+    } catch {
+      onSelectNode?.(node);
+    }
+  }, [onSelectNode]);
+
+  const handleCloseListing = useCallback(() => {
+    setOpenListing(null);
+    refresh(); // refetch after any action taken in the modal
+  }, [refresh]);
+
+  const handleCloseCreate = useCallback(() => {
+    setShowCreateListing(false);
+    refresh();
+  }, [refresh]);
 
   const totalHP = walletData?.totalHashpower || 0;
   const totalHexes = walletData?.totalHexes || 0;
@@ -153,74 +209,122 @@ export default function ProfilePage({ wallet, onClose, onSelectNode, isMobile, i
             Loading...
           </div>
         ) : tab === 'collected' ? (
-          <CollectedGrid nodes={nodes} isMobile={isMobile} onSelect={onSelectNode} />
+          <CollectedGrid
+            nodes={nodes}
+            listings={listings}
+            isMobile={isMobile}
+            onOpen={handleOpenNode}
+            onListForSale={() => setShowCreateListing(true)}
+          />
         ) : tab === 'listed' ? (
-          <ListedGrid listings={listings} isMobile={isMobile} />
+          <ListedGrid listings={listings} isMobile={isMobile} onOpen={handleOpenNode} />
         ) : tab === 'offers' ? (
-          <OffersTab offers={offers} wallet={wallet} />
+          <OffersTab offers={offers} wallet={wallet} onOpen={handleOpenNode} />
         ) : tab === 'favorites' ? (
           <FavoritesTab />
         ) : tab === 'settings' ? (
           <SettingsTab wallet={wallet} />
         ) : (
-          <ActivityTab salesHistory={salesHistory} wallet={wallet} mpStats={mpStats} />
+          <ActivityTab salesHistory={salesHistory} wallet={wallet} mpStats={mpStats} onOpen={handleOpenNode} />
         )}
+      </div>
+
+      {/* Listing Detail modal — works for buy/offer/cancel/accept/withdraw */}
+      {openListing && (
+        <ListingDetail
+          listing={openListing}
+          onClose={handleCloseListing}
+          onSelectNode={onSelectNode}
+          isMobile={isMobile}
+          wallet={wallet}
+        />
+      )}
+
+      {/* Create Listing modal */}
+      {showCreateListing && wallet?.isConnected && (
+        <CreateListing
+          onClose={handleCloseCreate}
+          isMobile={isMobile}
+          walletAddress={wallet.address}
+        />
+      )}
+    </div>
+  );
+}
+
+function CollectedGrid({ nodes, listings, isMobile, onOpen, onListForSale }) {
+  if (nodes.length === 0) {
+    return <EmptyState text="No NFTs in this wallet" />;
+  }
+
+  // Build a set of token IDs that are currently listed for the LISTED badge
+  const listedIds = new Set(listings.map(l => String(l.tokenId)));
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ fontSize: 11, color: '#778' }}>{nodes.length} NFT{nodes.length !== 1 ? 's' : ''} in wallet</div>
+        <button onClick={onListForSale} style={{
+          background: 'linear-gradient(135deg, #4ADE80, #22c55e)',
+          color: '#000', border: 'none', borderRadius: 6, padding: '6px 14px',
+          fontSize: 10, fontWeight: 800, fontFamily: 'inherit', letterSpacing: 1, cursor: 'pointer',
+        }}>+ LIST FOR SALE</button>
+      </div>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(160px, 1fr))',
+        gap: isMobile ? 8 : 10,
+      }}>
+        {nodes.map(node => {
+          const rc = RARITY_CONFIG[node.rarity]?.color || '#778';
+          const isListed = listedIds.has(String(node.id));
+          return (
+            <div key={node.id} onClick={() => onOpen?.(node)} style={{
+              background: '#0a140a', borderRadius: 10, overflow: 'hidden',
+              border: '1px solid #142014', cursor: 'pointer', transition: 'all 0.15s',
+            }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = rc + '44'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = '#142014'; e.currentTarget.style.transform = 'none'; }}
+            >
+              <div style={{ position: 'relative', paddingTop: '100%', background: '#060b06' }}>
+                <img src={NODE_IMAGE_URL(node.id)} alt={`#${node.id}`}
+                  style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                <div style={{
+                  position: 'absolute', top: 4, left: 4, background: rc + '22',
+                  border: `1px solid ${rc}44`, borderRadius: 4, padding: '1px 5px',
+                  fontSize: 7, fontWeight: 800, color: rc, letterSpacing: 1,
+                }}>{node.rarity?.toUpperCase()}</div>
+                {isListed && (
+                  <div style={{
+                    position: 'absolute', top: 4, right: 4, background: '#4ADE8022',
+                    border: '1px solid #4ADE8044', borderRadius: 4, padding: '1px 5px',
+                    fontSize: 7, fontWeight: 800, color: '#4ADE80', letterSpacing: 1,
+                  }}>LISTED</div>
+                )}
+                <div style={{
+                  position: 'absolute', bottom: 4, right: 4,
+                  width: 8, height: 8, borderRadius: '50%',
+                  background: node.activity === 'Active' ? '#4ADE80' : '#EF4444',
+                }} />
+              </div>
+              <div style={{ padding: '6px 8px' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#ddd' }}>#{node.id}</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
+                  <span style={{ fontSize: 8, color: '#556' }}>HP {formatNum(node.hashpower)}</span>
+                  <span style={{ fontSize: 8, color: '#556' }}>HEX {formatNum(node.hexesDecoded)}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function CollectedGrid({ nodes, isMobile, onSelect }) {
-  if (nodes.length === 0) {
-    return <EmptyState text="No NFTs in this wallet" />;
-  }
-  return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(160px, 1fr))',
-      gap: isMobile ? 8 : 10,
-    }}>
-      {nodes.map(node => {
-        const rc = RARITY_CONFIG[node.rarity]?.color || '#778';
-        return (
-          <div key={node.id} onClick={() => onSelect?.(node)} style={{
-            background: '#0a140a', borderRadius: 10, overflow: 'hidden',
-            border: '1px solid #142014', cursor: 'pointer', transition: 'all 0.15s',
-          }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = rc + '44'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = '#142014'; e.currentTarget.style.transform = 'none'; }}
-          >
-            <div style={{ position: 'relative', paddingTop: '100%', background: '#060b06' }}>
-              <img src={NODE_IMAGE_URL(node.id)} alt={`#${node.id}`}
-                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-              <div style={{
-                position: 'absolute', top: 4, left: 4, background: rc + '22',
-                border: `1px solid ${rc}44`, borderRadius: 4, padding: '1px 5px',
-                fontSize: 7, fontWeight: 800, color: rc, letterSpacing: 1,
-              }}>{node.rarity?.toUpperCase()}</div>
-              <div style={{
-                position: 'absolute', bottom: 4, right: 4,
-                width: 8, height: 8, borderRadius: '50%',
-                background: node.activity === 'Active' ? '#4ADE80' : '#EF4444',
-              }} />
-            </div>
-            <div style={{ padding: '6px 8px' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#ddd' }}>#{node.id}</div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
-                <span style={{ fontSize: 8, color: '#556' }}>HP {formatNum(node.hashpower)}</span>
-                <span style={{ fontSize: 8, color: '#556' }}>HEX {formatNum(node.hexesDecoded)}</span>
-              </div>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function ListedGrid({ listings, isMobile }) {
+function ListedGrid({ listings, isMobile, onOpen }) {
   if (listings.length === 0) {
-    return <EmptyState text="No active listings" />;
+    return <EmptyState text="No active listings. List one of your NFTs from the Collected tab." />;
   }
   return (
     <div style={{
@@ -231,10 +335,13 @@ function ListedGrid({ listings, isMobile }) {
       {listings.map(l => {
         const rc = RARITY_CONFIG[l.rarity]?.color || '#778';
         return (
-          <div key={l.listingId} style={{
+          <div key={l.listingId} onClick={() => onOpen?.(l)} style={{
             background: '#0a140a', borderRadius: 10, overflow: 'hidden',
-            border: '1px solid #142014',
-          }}>
+            border: '1px solid #142014', cursor: 'pointer', transition: 'all 0.15s',
+          }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = rc + '44'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = '#142014'; e.currentTarget.style.transform = 'none'; }}
+          >
             <div style={{ position: 'relative', paddingTop: '80%', background: '#060b06' }}>
               <img src={NODE_IMAGE_URL(l.tokenId)} alt={`#${l.tokenId}`}
                 style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -265,25 +372,38 @@ function ListedGrid({ listings, isMobile }) {
   );
 }
 
-function OffersTab({ offers, wallet }) {
-  if (offers.length === 0) return <EmptyState text="No active offers" />;
+function OffersTab({ offers, wallet, onOpen }) {
+  if (offers.length === 0) return <EmptyState text="No active offers. Browse the marketplace to make one." />;
   return (
-    <div style={{ maxWidth: 600 }}>
+    <div style={{ maxWidth: 700 }}>
       {offers.map((o, i) => {
         const rc = RARITY_CONFIG[o.rarity]?.color || '#778';
         const expired = o.expiresAt && new Date(o.expiresAt) < new Date();
         return (
-          <div key={i} style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            padding: '10px 0', borderBottom: '1px solid #0d180d',
-            opacity: expired ? 0.5 : 1,
-          }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#ddd', minWidth: 60 }}>#{o.tokenId}</div>
-            <span style={{ fontSize: 9, color: rc }}>{o.rarity}</span>
+          <div key={i}
+            onClick={() => onOpen?.({ listingId: o.listingId, tokenId: o.tokenId, rarity: o.rarity, status: 'Active' })}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '12px 14px', marginBottom: 6,
+              background: '#0a140a', border: '1px solid #142014', borderRadius: 8,
+              opacity: expired ? 0.5 : 1, cursor: 'pointer', transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = '#60A5FA44'}
+            onMouseLeave={e => e.currentTarget.style.borderColor = '#142014'}
+          >
+            <img src={NODE_IMAGE_URL(o.tokenId)} alt={`#${o.tokenId}`}
+              style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', background: '#060b06' }} />
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#ddd' }}>#{o.tokenId}</div>
+              <span style={{ fontSize: 9, color: rc }}>{o.rarity}</span>
+            </div>
             <div style={{ flex: 1 }} />
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#60A5FA' }}>{Number(o.amount).toFixed(2)} GUN</span>
-            <span style={{ fontSize: 9, color: expired ? '#EF4444' : '#334', minWidth: 60, textAlign: 'right' }}>
-              {expired ? 'EXPIRED' : timeAgo(o.createdAt)}
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 8, color: '#445' }}>YOUR OFFER</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#60A5FA' }}>{Number(o.amount).toFixed(2)} GUN</div>
+            </div>
+            <span style={{ fontSize: 9, color: expired ? '#EF4444' : '#334', minWidth: 70, textAlign: 'right' }}>
+              {expired ? 'EXPIRED' : `expires ${timeAgo(o.expiresAt)}`}
             </span>
           </div>
         );
@@ -292,7 +412,7 @@ function OffersTab({ offers, wallet }) {
   );
 }
 
-function ActivityTab({ salesHistory, wallet, mpStats }) {
+function ActivityTab({ salesHistory, wallet, mpStats, onOpen }) {
   if (!salesHistory || salesHistory.length === 0) {
     return (
       <div>
@@ -322,7 +442,17 @@ function ActivityTab({ salesHistory, wallet, mpStats }) {
       {salesHistory.map((s, i) => {
         const isSeller = wallet?.address?.toLowerCase() === s.seller?.toLowerCase();
         return (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid #0d180d' }}>
+          <div key={i}
+            onClick={() => onOpen?.({ id: s.tokenId, rarity: null })}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
+              borderBottom: '1px solid #0d180d', cursor: 'pointer', transition: 'background 0.1s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = '#0c180c'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          >
+            <img src={NODE_IMAGE_URL(s.tokenId)} alt={`#${s.tokenId}`}
+              style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover', background: '#060b06' }} />
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: isSeller ? '#4ADE80' : '#60A5FA', flexShrink: 0 }} />
             <div style={{ flex: 1 }}>
               <span style={{ fontSize: 11, color: '#aaa' }}>{isSeller ? 'Sold' : 'Bought'} Node #{s.tokenId}</span>
