@@ -20,6 +20,21 @@ const TAB_MAP = {
   settings: 'settings',
 };
 
+// Render a countdown until the given timestamp (matches OpenSea style)
+function offerCountdown(expiresAt) {
+  if (!expiresAt) return null;
+  const ms = new Date(expiresAt).getTime() - Date.now();
+  if (ms <= 0) return 'EXPIRED';
+  const sec = Math.floor(ms / 1000);
+  const days = Math.floor(sec / 86400);
+  const hours = Math.floor((sec % 86400) / 3600);
+  const mins = Math.floor((sec % 3600) / 60);
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${mins}m`;
+  if (mins > 0) return `${mins}m`;
+  return '< 1m';
+}
+
 export default function ProfilePage({ wallet, onClose, onSelectNode, isMobile, initialTab }) {
   const [tab, setTab] = useState(TAB_MAP[initialTab] || 'collected');
 
@@ -41,6 +56,13 @@ export default function ProfilePage({ wallet, onClose, onSelectNode, isMobile, i
   // Modals — for opening listing detail and create-listing flow
   const [openListing, setOpenListing] = useState(null);   // listing object to view in ListingDetail
   const [showCreateListing, setShowCreateListing] = useState(false);
+
+  // Live tick so offer countdowns update without a refetch
+  const [, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(t);
+  }, []);
 
   const refresh = useCallback(() => setRefreshKey(k => k + 1), []);
 
@@ -301,8 +323,8 @@ function CollectedGrid({ nodes, listings, isMobile, onOpen, onListForSale }) {
       </div>
       <div style={{
         display: 'grid',
-        gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(160px, 1fr))',
-        gap: isMobile ? 8 : 10,
+        gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))',
+        gap: isMobile ? 8 : 12,
       }}>
         {nodes.map(node => {
           const rc = RARITY_CONFIG[node.rarity]?.color || '#778';
@@ -319,28 +341,24 @@ function CollectedGrid({ nodes, listings, isMobile, onOpen, onListForSale }) {
                 <img src={NODE_IMAGE_URL(node.id)} alt={`#${node.id}`}
                   style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
                 <div style={{
-                  position: 'absolute', top: 4, left: 4, background: rc + '22',
-                  border: `1px solid ${rc}44`, borderRadius: 4, padding: '1px 5px',
-                  fontSize: 7, fontWeight: 800, color: rc, letterSpacing: 1,
+                  position: 'absolute', top: 6, left: 6, background: rc + '22',
+                  border: `1px solid ${rc}55`, borderRadius: 4, padding: '2px 6px',
+                  fontSize: 8, fontWeight: 800, color: rc, letterSpacing: 1,
+                  backdropFilter: 'blur(4px)',
                 }}>{node.rarity?.toUpperCase()}</div>
-                {isListed && (
-                  <div style={{
-                    position: 'absolute', top: 4, right: 4, background: '#4ADE8022',
-                    border: '1px solid #4ADE8044', borderRadius: 4, padding: '1px 5px',
-                    fontSize: 7, fontWeight: 800, color: '#4ADE80', letterSpacing: 1,
-                  }}>LISTED</div>
-                )}
+                {isListed && <ListedBadge />}
                 <div style={{
-                  position: 'absolute', bottom: 4, right: 4,
-                  width: 8, height: 8, borderRadius: '50%',
+                  position: 'absolute', bottom: 6, right: 6,
+                  width: 9, height: 9, borderRadius: '50%',
                   background: node.activity === 'Active' ? '#4ADE80' : '#EF4444',
+                  border: '1.5px solid #060b06',
                 }} />
               </div>
-              <div style={{ padding: '6px 8px' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#ddd' }}>#{node.id}</div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
-                  <span style={{ fontSize: 8, color: '#556' }}>HP {formatNum(node.hashpower)}</span>
-                  <span style={{ fontSize: 8, color: '#556' }}>HEX {formatNum(node.hexesDecoded)}</span>
+              <div style={{ padding: isMobile ? '8px 8px 10px' : '10px 12px 12px' }}>
+                <div style={{ fontSize: isMobile ? 12 : 13, fontWeight: 800, color: '#ddd', marginBottom: 6 }}>#{node.id}</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 9, color: '#667' }}>HP {formatNum(node.hashpower)}</span>
+                  <span style={{ fontSize: 9, color: '#667' }}>HEX {formatNum(node.hexesDecoded)}</span>
                 </div>
               </div>
             </div>
@@ -358,8 +376,8 @@ function ListedGrid({ listings, isMobile, onOpen }) {
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(180px, 1fr))',
-      gap: isMobile ? 8 : 10,
+      gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))',
+      gap: isMobile ? 8 : 12,
     }}>
       {listings.map(l => {
         const rc = RARITY_CONFIG[l.rarity]?.color || '#778';
@@ -371,28 +389,32 @@ function ListedGrid({ listings, isMobile, onOpen }) {
             onMouseEnter={e => { e.currentTarget.style.borderColor = rc + '44'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = '#142014'; e.currentTarget.style.transform = 'none'; }}
           >
-            <div style={{ position: 'relative', paddingTop: '80%', background: '#060b06' }}>
+            <div style={{ position: 'relative', paddingTop: '100%', background: '#060b06' }}>
               <img src={NODE_IMAGE_URL(l.tokenId)} alt={`#${l.tokenId}`}
                 style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
               <div style={{
-                position: 'absolute', top: 4, left: 4, background: '#4ADE8022',
-                border: '1px solid #4ADE8044', borderRadius: 4, padding: '1px 5px',
-                fontSize: 7, fontWeight: 800, color: '#4ADE80', letterSpacing: 1,
-              }}>LISTED</div>
+                position: 'absolute', top: 6, left: 6, background: rc + '22',
+                border: `1px solid ${rc}55`, borderRadius: 4, padding: '2px 6px',
+                fontSize: 8, fontWeight: 800, color: rc, letterSpacing: 1,
+                backdropFilter: 'blur(4px)',
+              }}>{l.rarity?.toUpperCase()}</div>
+              <ListedBadge />
             </div>
-            <div style={{ padding: '8px 10px' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#ddd', marginBottom: 2 }}>#{l.tokenId}</div>
-              <div style={{ fontSize: 9, color: rc, marginBottom: 4 }}>{l.rarity}</div>
+            <div style={{ padding: isMobile ? '8px 8px 10px' : '10px 12px 12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <span style={{ fontSize: isMobile ? 12 : 13, fontWeight: 800, color: '#ddd' }}>#{l.tokenId}</span>
+                <span style={{ fontSize: 9, color: '#445' }}>{timeAgo(l.createdAt)}</span>
+              </div>
               <div style={{
-                background: '#060b06', borderRadius: 6, padding: '4px 6px',
-                display: 'flex', justifyContent: 'space-between',
+                background: '#0a180a', borderRadius: 6, padding: '6px 8px',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                border: '1px solid #142014',
               }}>
-                <span style={{ fontSize: 8, color: '#556' }}>PRICE</span>
-                <span style={{ fontSize: 11, fontWeight: 800, color: '#4ADE80' }}>
+                <span style={{ fontSize: 8, color: '#556', letterSpacing: 1 }}>PRICE</span>
+                <span style={{ fontSize: isMobile ? 12 : 14, fontWeight: 800, color: '#4ADE80' }}>
                   {Number(l.price).toFixed(1)} GUN
                 </span>
               </div>
-              <div style={{ fontSize: 8, color: '#334', marginTop: 4 }}>Listed {timeAgo(l.createdAt)}</div>
             </div>
           </div>
         );
@@ -465,6 +487,12 @@ function OffersTab({ offers, receivedOffers, wallet, onOpen }) {
                     </div>
                   )}
                 </div>
+                <div style={{ textAlign: 'right', minWidth: 60 }}>
+                  <div style={{ fontSize: 7, color: '#445', letterSpacing: 1 }}>EXPIRES</div>
+                  <div style={{ fontSize: 9, color: expired ? '#EF4444' : '#FBBF24', fontWeight: 700 }}>
+                    {expired ? 'EXPIRED' : offerCountdown(o.expiresAt) || '—'}
+                  </div>
+                </div>
                 <button style={{
                   background: '#4ADE8022', border: '1px solid #4ADE8055', borderRadius: 6,
                   color: '#4ADE80', padding: '6px 12px', fontSize: 10, fontWeight: 800,
@@ -505,7 +533,7 @@ function OffersTab({ offers, receivedOffers, wallet, onOpen }) {
                   <div style={{ fontSize: 13, fontWeight: 800, color: '#60A5FA' }}>{Number(o.amount).toFixed(2)} GUN</div>
                 </div>
                 <span style={{ fontSize: 9, color: expired ? '#EF4444' : '#334', minWidth: 70, textAlign: 'right' }}>
-                  {expired ? 'EXPIRED' : `expires ${timeAgo(o.expiresAt)}`}
+                  {expired ? 'EXPIRED' : `expires in ${offerCountdown(o.expiresAt)}`}
                 </span>
               </div>
             );
@@ -573,6 +601,27 @@ function ActivityTab({ salesHistory, wallet, mpStats, onOpen }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// Shared LISTED badge — high-contrast red so it's instantly visible
+function ListedBadge() {
+  return (
+    <div style={{
+      position: 'absolute', top: 6, right: 6,
+      background: '#EF4444',
+      border: '1.5px solid #fff',
+      borderRadius: 4,
+      padding: '3px 8px',
+      fontSize: 9,
+      fontWeight: 900,
+      color: '#fff',
+      letterSpacing: 1.5,
+      boxShadow: '0 2px 8px rgba(239, 68, 68, 0.6)',
+      textTransform: 'uppercase',
+    }}>
+      • LISTED
     </div>
   );
 }

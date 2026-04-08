@@ -198,7 +198,7 @@ export default function CreateListing({ onClose, isMobile, walletAddress }) {
               </div>
               <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
                 <InfoBox color="#4ADE80" title="ESCROW" desc="NFT held in contract until sold or cancelled" />
-                <InfoBox color="#EF4444" title="CANCEL FEE" desc="100 GUN penalty if you unlist" />
+                <InfoBox color="#EF4444" title="CANCEL FEE" desc="1000 GUN penalty if you unlist" />
               </div>
               <button onClick={() => priceNum > 0 && setStep(3)} disabled={!priceNum || priceNum <= 0}
                 style={{ width: '100%', background: priceNum > 0 ? 'linear-gradient(135deg, #4ADE80, #22c55e)' : '#0a140a', color: priceNum > 0 ? '#000' : '#334', border: 'none', borderRadius: 10, padding: '12px', fontSize: 13, fontWeight: 800, fontFamily: 'inherit', cursor: priceNum > 0 ? 'pointer' : 'default', letterSpacing: 2 }}>CONTINUE</button>

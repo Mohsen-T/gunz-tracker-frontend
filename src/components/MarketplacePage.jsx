@@ -459,13 +459,26 @@ function ListingCard({ listing, isMobile, onClick }) {
         }}>
           {listing.rarity}
         </div>
-        {/* Offer count badge */}
+        {/* High-contrast LISTED badge */}
+        <div style={{
+          position: 'absolute', top: 6, right: 6,
+          background: '#EF4444',
+          border: '1.5px solid #fff',
+          borderRadius: 4, padding: '3px 8px',
+          fontSize: 9, fontWeight: 900, color: '#fff',
+          letterSpacing: 1.5, textTransform: 'uppercase',
+          boxShadow: '0 2px 8px rgba(239, 68, 68, 0.6)',
+        }}>
+          • LISTED
+        </div>
+        {/* Offer count badge (below LISTED) */}
         {listing.offerCount > 0 && (
           <div style={{
-            position: 'absolute', top: 6, right: 6,
+            position: 'absolute', top: 32, right: 6,
             background: '#C084FC22', border: '1px solid #C084FC55',
             borderRadius: 4, padding: '2px 6px',
             fontSize: 8, fontWeight: 800, color: '#C084FC',
+            backdropFilter: 'blur(4px)',
           }}>
             {listing.offerCount} OFFER{listing.offerCount > 1 ? 'S' : ''}
           </div>

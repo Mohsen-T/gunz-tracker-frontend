@@ -5,6 +5,21 @@ import { fetchMarketplaceListing, fetchMarketplaceConfig } from '../services/api
 import * as mp from '../services/marketplace';
 import { useToast } from './Toast';
 
+// Render a human-readable countdown until the given timestamp
+function countdown(expiresAt) {
+  if (!expiresAt) return '—';
+  const ms = new Date(expiresAt).getTime() - Date.now();
+  if (ms <= 0) return 'EXPIRED';
+  const sec = Math.floor(ms / 1000);
+  const days = Math.floor(sec / 86400);
+  const hours = Math.floor((sec % 86400) / 3600);
+  const mins = Math.floor((sec % 3600) / 60);
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${mins}m`;
+  if (mins > 0) return `${mins}m`;
+  return '< 1m';
+}
+
 export default function ListingDetail({ listing: initialListing, onClose, onSelectNode, isMobile, wallet, onConnectWallet }) {
   const toast = useToast();
   const [listing, setListing] = useState(initialListing);
@@ -17,11 +32,19 @@ export default function ListingDetail({ listing: initialListing, onClose, onSele
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [showOfferInput, setShowOfferInput] = useState(false);
   const [offerAmount, setOfferAmount] = useState('');
-  const [txPending, setTxPending] = useState(null); // 'buy' | 'offer' | 'cancel' | 'accept' | 'withdraw'
-  const [txResult, setTxResult] = useState(null); // { ok, hash, error }
+  const [offerDuration, setOfferDuration] = useState(7 * 86400); // default 7 days, in seconds
+  const [txPending, setTxPending] = useState(null);
+  const [txResult, setTxResult] = useState(null);
+
+  // Live tick for offer countdowns (re-renders every 30s)
+  const [, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(t);
+  }, []);
 
   const rarityColor = RARITY_CONFIG[listing.rarity]?.color || '#778';
-  const cancelPenalty = config?.cancelPenalty ?? 100;
+  const cancelPenalty = config?.cancelPenalty ?? 1000;
   const minOffer = config?.minOfferAmount ?? 0.01;
   const offerDays = config?.offerDurationDays ?? 7;
   const sellerFeePct = config ? (config.sellerFeeBps / 100) : 3;
@@ -76,7 +99,7 @@ export default function ListingDetail({ listing: initialListing, onClose, onSele
   const handlePlaceOffer = async () => {
     if (!offerValid) return;
     const result = await runTx('offer', 'Offer placed', () =>
-      mp.placeOffer(listing.listingId, offerAmount)
+      mp.placeOffer(listing.listingId, offerAmount, offerDuration)
     );
     if (result) { setOfferAmount(''); setShowOfferInput(false); }
   };
@@ -91,6 +114,10 @@ export default function ListingDetail({ listing: initialListing, onClose, onSele
 
   const handleWithdrawOffer = (offerId) => runTx('withdraw', 'Offer withdrawn', () =>
     mp.withdrawOffer(offerId)
+  );
+
+  const handleRejectOffer = (offerId) => runTx('reject', 'Offer rejected', () =>
+    mp.rejectOffer(offerId)
   );
 
   // ─── Transaction status banner ───
@@ -171,7 +198,7 @@ export default function ListingDetail({ listing: initialListing, onClose, onSele
               </div>
             )}
 
-            {/* Offer input */}
+            {/* Offer input with duration picker */}
             {showOfferInput && listing.status === 'Active' && wallet?.isConnected && (
               <div style={{ marginTop: 12 }}>
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -182,7 +209,24 @@ export default function ListingDetail({ listing: initialListing, onClose, onSele
                     {txPending === 'offer' ? '...' : 'SUBMIT'}
                   </button>
                 </div>
-                <div style={{ fontSize: 9, color: '#445', marginTop: 6 }}>Min: {minOffer} GUN &middot; Expires in {offerDays}d &middot; GUN escrowed in contract</div>
+                {/* Duration picker (OpenSea-style) */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                  <span style={{ fontSize: 9, color: '#778', letterSpacing: 1 }}>EXPIRES IN</span>
+                  <select value={offerDuration} onChange={e => setOfferDuration(Number(e.target.value))}
+                    style={{ flex: 1, background: '#060b06', border: '1px solid #1a2a1a', borderRadius: 6, color: '#aaa', padding: '6px 8px', fontSize: 11, fontFamily: 'inherit', outline: 'none', cursor: 'pointer' }}>
+                    <option value={3600}>1 hour</option>
+                    <option value={6 * 3600}>6 hours</option>
+                    <option value={86400}>1 day</option>
+                    <option value={3 * 86400}>3 days</option>
+                    <option value={7 * 86400}>7 days</option>
+                    <option value={30 * 86400}>30 days</option>
+                    <option value={90 * 86400}>3 months</option>
+                    <option value={180 * 86400}>6 months</option>
+                  </select>
+                </div>
+                <div style={{ fontSize: 9, color: '#445', marginTop: 6 }}>
+                  Min: {minOffer} GUN &middot; GUN escrowed until accepted, rejected, withdrawn, or expired
+                </div>
               </div>
             )}
           </div>
@@ -244,22 +288,37 @@ export default function ListingDetail({ listing: initialListing, onClose, onSele
               {activeOffers.map((offer, i) => {
                 const expired = offer.expiresAt && new Date(offer.expiresAt) < new Date();
                 const isMyOffer = wallet?.address?.toLowerCase() === offer.bidder?.toLowerCase();
+                const remaining = countdown(offer.expiresAt);
                 return (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderBottom: '1px solid #0d180d', opacity: expired ? 0.4 : 1 }}>
-                    <span style={{ fontSize: 11, color: '#aaa', flex: 1 }}>{shortenAddr(offer.bidder)}{isMyOffer && <span style={{ color: '#4ADE80', fontSize: 8, marginLeft: 4 }}>(you)</span>}</span>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: expired ? '#556' : '#60A5FA' }}>{Number(offer.amount).toFixed(2)} GUN</span>
-                    <span style={{ fontSize: 9, color: expired ? '#EF4444' : '#334', minWidth: 50, textAlign: 'right' }}>{expired ? 'EXPIRED' : timeAgo(offer.createdAt)}</span>
-                    {/* Accept button (seller only) */}
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px', borderBottom: '1px solid #0d180d', opacity: expired ? 0.5 : 1 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 11, color: '#aaa' }}>
+                        {shortenAddr(offer.bidder)}{isMyOffer && <span style={{ color: '#4ADE80', fontSize: 8, marginLeft: 4 }}>(you)</span>}
+                      </div>
+                      <div style={{ fontSize: 8, color: expired ? '#EF4444' : '#445', marginTop: 2 }}>
+                        {expired ? 'EXPIRED' : `${remaining} left`}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: expired ? '#556' : '#60A5FA', minWidth: 90, textAlign: 'right' }}>
+                      {Number(offer.amount).toFixed(2)} GUN
+                    </div>
+                    {/* Seller actions: Accept + Reject */}
                     {isSeller && !expired && (
-                      <button onClick={() => handleAcceptOffer(offer.offerId)} disabled={!!txPending}
-                        style={{ background: '#4ADE8022', border: '1px solid #4ADE8044', borderRadius: 4, color: '#4ADE80', padding: '2px 8px', fontSize: 8, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer', letterSpacing: 1 }}>
-                        ACCEPT
-                      </button>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button onClick={() => handleAcceptOffer(offer.offerId)} disabled={!!txPending}
+                          style={{ background: '#4ADE8022', border: '1px solid #4ADE8055', borderRadius: 4, color: '#4ADE80', padding: '4px 10px', fontSize: 9, fontWeight: 800, fontFamily: 'inherit', cursor: 'pointer', letterSpacing: 1 }}>
+                          ACCEPT
+                        </button>
+                        <button onClick={() => handleRejectOffer(offer.offerId)} disabled={!!txPending}
+                          style={{ background: '#EF444422', border: '1px solid #EF444455', borderRadius: 4, color: '#EF4444', padding: '4px 10px', fontSize: 9, fontWeight: 800, fontFamily: 'inherit', cursor: 'pointer', letterSpacing: 1 }}>
+                          REJECT
+                        </button>
+                      </div>
                     )}
-                    {/* Withdraw button (bidder only, or anyone for expired) */}
-                    {(isMyOffer || expired) && (
+                    {/* Bidder withdraw, or anyone for expired */}
+                    {(isMyOffer || expired) && !isSeller && (
                       <button onClick={() => handleWithdrawOffer(offer.offerId)} disabled={!!txPending}
-                        style={{ background: '#EF444411', border: '1px solid #EF444433', borderRadius: 4, color: '#EF4444', padding: '2px 8px', fontSize: 8, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer', letterSpacing: 1 }}>
+                        style={{ background: '#EF444411', border: '1px solid #EF444433', borderRadius: 4, color: '#EF4444', padding: '4px 10px', fontSize: 9, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer', letterSpacing: 1 }}>
                         {isMyOffer ? 'WITHDRAW' : 'REFUND'}
                       </button>
                     )}

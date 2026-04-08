@@ -393,32 +393,34 @@ export async function updateListingPrice(listingId, newPriceGun) {
  * Place an offer on a listing (GUN escrowed).
  * @param {number} listingId
  * @param {string} amountGun
+ * @param {number} [durationSeconds=0] - Custom expiry duration. 0 = use contract default
  * @returns {Promise<{hash: string, offerId: number}>}
  */
-export async function placeOffer(listingId, amountGun) {
+export async function placeOffer(listingId, amountGun, durationSeconds = 0) {
   const { parseEther } = await getEthers();
 
-  // Sanity check: verify the marketplace contract exists at this address
-  const provider = await getProvider();
+  const provider = await getReadProvider();
   const code = await provider.getCode(getMarketplaceAddress());
   if (!code || code === '0x') {
     throw new Error(`No contract at ${getMarketplaceAddress()} — was your local node restarted? Re-deploy the marketplace.`);
   }
 
-  const mp = await getMarketplaceContract(true);
-
-  // Verify listing is active on-chain before placing offer
+  const mpRead = await getMarketplaceContract(false);
   try {
-    const listing = await mp.getListing(BigInt(listingId));
+    const listing = await mpRead.getListing(BigInt(listingId));
     if (Number(listing.status) !== 0) {
-      throw new Error(`Listing #${listingId} is not active on-chain (status=${listing.status}). DB may be out of sync — re-run setup-test.js and seed-db.js.`);
+      throw new Error(`Listing #${listingId} is not active on-chain. DB may be out of sync.`);
     }
   } catch (err) {
     if (err.message?.startsWith('Listing #')) throw err;
     throw new Error(`Failed to read listing from contract: ${err.message}`);
   }
 
-  const tx = await mp.placeOffer(BigInt(listingId), { value: parseEther(String(amountGun)) });
+  const mp = await getMarketplaceContract(true);
+  // Use custom-duration variant when caller passed a duration
+  const tx = durationSeconds > 0
+    ? await mp.placeOfferWith(BigInt(listingId), BigInt(durationSeconds), { value: parseEther(String(amountGun)) })
+    : await mp.placeOffer(BigInt(listingId), { value: parseEther(String(amountGun)) });
   const receipt = await tx.wait();
 
   let offerId = null, bidder = null, expiresAt = null;
@@ -488,6 +490,22 @@ export async function withdrawOffer(offerId) {
   const receipt = await tx.wait();
 
   await reportToBackend('offer-withdrawn', {
+    offerId, txHash: receipt.hash,
+  });
+
+  return { hash: receipt.hash };
+}
+
+/**
+ * Reject (decline) an offer — seller only.
+ * Refunds the bidder and marks the offer as withdrawn.
+ */
+export async function rejectOffer(offerId) {
+  const mp = await getMarketplaceContract(true);
+  const tx = await mp.rejectOffer(BigInt(offerId));
+  const receipt = await tx.wait();
+
+  await reportToBackend('offer-rejected', {
     offerId, txHash: receipt.hash,
   });
 
