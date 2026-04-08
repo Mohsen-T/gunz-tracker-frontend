@@ -4,6 +4,7 @@ import { formatNum, shortenAddr } from '../utils/format';
 import { fetchWallet, fetchWalletMarketplace } from '../services/api';
 import { approveNft, listNft, checkApproval } from '../services/marketplace';
 import { useToast } from './Toast';
+import { useGunPrice, formatUsd } from '../hooks/useGunPrice';
 
 /**
  * OpenSea-style listing flow wired to real contract calls:
@@ -14,7 +15,9 @@ import { useToast } from './Toast';
  */
 export default function CreateListing({ onClose, isMobile, walletAddress }) {
   const toast = useToast();
+  const gunPrice = useGunPrice();
   const [nodes, setNodes] = useState([]);
+  const [activeNodeError, setActiveNodeError] = useState(null);
   const [selectedNode, setSelectedNode] = useState(null);
   const [price, setPrice] = useState('');
   const [loading, setLoading] = useState(true);
@@ -71,6 +74,11 @@ export default function CreateListing({ onClose, isMobile, walletAddress }) {
   const proceeds = priceNum - fee;
 
   const handleList = async () => {
+    // Hard guard: never list an active node
+    if (selectedNode?.activity === 'Active') {
+      setActiveNodeError(selectedNode);
+      return;
+    }
     setStep(4);
     setTxError(null);
     const nftContract = selectedNode.nftContract || GUNZ_LICENSE_CONTRACT;
@@ -150,14 +158,36 @@ export default function CreateListing({ onClose, isMobile, walletAddress }) {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, maxHeight: 400, overflow: 'auto' }}>
                   {nodes.map(node => {
                     const rc = RARITY_CONFIG[node.rarity]?.color || '#778';
+                    const isActive = node.activity === 'Active';
                     return (
-                      <div key={node.id} onClick={() => { setSelectedNode(node); setStep(2); }}
-                        style={{ background: '#0a140a', border: '1px solid #142014', borderRadius: 10, cursor: 'pointer', overflow: 'hidden', transition: 'all 0.15s' }}
-                        onMouseEnter={e => e.currentTarget.style.borderColor = rc + '44'}
-                        onMouseLeave={e => e.currentTarget.style.borderColor = '#142014'}>
+                      <div key={node.id} onClick={() => {
+                        if (isActive) {
+                          setActiveNodeError(node);
+                          return;
+                        }
+                        setSelectedNode(node); setStep(2);
+                      }}
+                        title={isActive ? 'Active node — must be deactivated before listing' : `List Node #${node.id}`}
+                        style={{
+                          background: '#0a140a',
+                          border: `1px solid ${isActive ? '#3a1a1a' : '#142014'}`,
+                          borderRadius: 10, cursor: 'pointer', overflow: 'hidden',
+                          transition: 'all 0.15s',
+                          opacity: isActive ? 0.65 : 1,
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.borderColor = isActive ? '#EF444466' : rc + '44'}
+                        onMouseLeave={e => e.currentTarget.style.borderColor = isActive ? '#3a1a1a' : '#142014'}>
                         <div style={{ position: 'relative', paddingTop: '80%', background: '#060b06' }}>
                           <img src={NODE_IMAGE_URL(node.id)} alt={`#${node.id}`} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
                           <div style={{ position: 'absolute', top: 4, left: 4, background: rc + '22', border: `1px solid ${rc}44`, borderRadius: 4, padding: '1px 5px', fontSize: 7, fontWeight: 800, color: rc, letterSpacing: 1 }}>{node.rarity?.toUpperCase()}</div>
+                          {isActive && (
+                            <div style={{
+                              position: 'absolute', top: 4, right: 4,
+                              background: '#EF4444', border: '1.5px solid #fff', borderRadius: 4,
+                              padding: '2px 6px', fontSize: 7, fontWeight: 900, color: '#fff',
+                              letterSpacing: 1, boxShadow: '0 2px 6px rgba(239,68,68,0.6)',
+                            }}>ACTIVE</div>
+                          )}
                         </div>
                         <div style={{ padding: '6px 8px' }}>
                           <div style={{ fontSize: 11, fontWeight: 700, color: '#ddd' }}>#{node.id}</div>
@@ -186,8 +216,11 @@ export default function CreateListing({ onClose, isMobile, walletAddress }) {
                 <div style={{ fontSize: 10, color: '#778', letterSpacing: 1, marginBottom: 6, fontWeight: 700 }}>LISTING PRICE</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#060b06', border: '1px solid #1a2a1a', borderRadius: 10, padding: '4px 12px' }}>
                   <input type="number" placeholder="0.00" value={price} onChange={e => setPrice(e.target.value)}
-                    style={{ flex: 1, background: 'transparent', border: 'none', color: '#ddd', padding: '10px 0', fontSize: 22, fontWeight: 800, fontFamily: 'inherit', outline: 'none' }} />
+                    style={{ flex: 1, background: 'transparent', border: 'none', color: '#ddd', padding: '10px 0', fontSize: 22, fontWeight: 800, fontFamily: 'inherit', outline: 'none', minWidth: 0 }} />
                   <span style={{ fontSize: 14, fontWeight: 800, color: '#4ADE80' }}>GUN</span>
+                </div>
+                <div style={{ fontSize: 10, color: '#556', marginTop: 4, textAlign: 'right' }}>
+                  ≈ {formatUsd(priceNum, gunPrice)} USD
                 </div>
               </div>
               <div style={{ background: '#0a140a', borderRadius: 8, padding: '10px 12px', marginBottom: 16 }}>
@@ -195,6 +228,11 @@ export default function CreateListing({ onClose, isMobile, walletAddress }) {
                 <Row l="Seller fee (3%)" v={priceNum ? `-${fee.toFixed(2)} GUN` : '—'} vc="#EF4444" />
                 <div style={{ height: 1, background: '#142014', margin: '6px 0' }} />
                 <Row l="You receive" v={priceNum ? `${proceeds.toFixed(2)} GUN` : '—'} vc="#4ADE80" vb />
+                {priceNum > 0 && (
+                  <div style={{ fontSize: 9, color: '#445', textAlign: 'right', marginTop: 2 }}>
+                    ≈ {formatUsd(proceeds, gunPrice)} USD
+                  </div>
+                )}
               </div>
               <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
                 <InfoBox color="#4ADE80" title="ESCROW" desc="NFT held in contract until sold or cancelled" />
@@ -217,6 +255,9 @@ export default function CreateListing({ onClose, isMobile, walletAddress }) {
                 <Row l="Price" v={`${priceNum.toFixed(2)} GUN`} vc="#4ADE80" vb />
                 <Row l="Seller fee (3%)" v={`-${fee.toFixed(2)} GUN`} vc="#EF4444" />
                 <Row l="You receive" v={`${proceeds.toFixed(2)} GUN`} vc="#4ADE80" vb />
+                <div style={{ fontSize: 9, color: '#445', textAlign: 'right', marginTop: 4 }}>
+                  ≈ {formatUsd(proceeds, gunPrice)} USD
+                </div>
               </div>
               <div style={{ fontSize: 10, color: '#556', marginBottom: 16, lineHeight: 1.7 }}>
                 Two transactions will be requested:
@@ -267,6 +308,52 @@ export default function CreateListing({ onClose, isMobile, walletAddress }) {
           )}
         </div>
       </div>
+
+      {/* Active Node Error Modal */}
+      {activeNodeError && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 200,
+          background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 16,
+        }}>
+          <div style={{
+            background: '#080f08', border: '1px solid #3a1a1a', borderRadius: 14,
+            padding: 24, maxWidth: 420, width: '100%',
+            boxShadow: '0 20px 60px rgba(239, 68, 68, 0.3)',
+            textAlign: 'center',
+          }}>
+            {/* Warning icon */}
+            <div style={{
+              width: 56, height: 56, borderRadius: '50%',
+              background: '#1a0a0a', border: '2px solid #EF444466',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 28, color: '#EF4444', margin: '0 auto 16px',
+              fontWeight: 800,
+            }}>!</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: '#EF4444', marginBottom: 8, letterSpacing: 1 }}>
+              Cannot list active node
+            </div>
+            <div style={{ fontSize: 12, color: '#aaa', lineHeight: 1.6, marginBottom: 8 }}>
+              Node <strong style={{ color: '#fff' }}>#{activeNodeError.id}</strong> is currently <strong style={{ color: '#4ADE80' }}>Active</strong> and cannot be listed on the marketplace.
+            </div>
+            <div style={{
+              background: '#0d1a0d', border: '1px solid #1a3a1a', borderRadius: 8,
+              padding: '10px 14px', marginBottom: 16,
+              fontSize: 11, color: '#778', lineHeight: 1.6,
+            }}>
+              Please <strong style={{ color: '#FBBF24' }}>de-activate the node first on the Hacker Platform</strong> before listing it for sale.
+            </div>
+            <button onClick={() => setActiveNodeError(null)} style={{
+              width: '100%',
+              background: '#EF444422', border: '1px solid #EF444455', borderRadius: 10,
+              color: '#EF4444', padding: '12px', fontSize: 12, fontWeight: 800,
+              fontFamily: 'inherit', cursor: 'pointer', letterSpacing: 2,
+            }}>UNDERSTOOD</button>
+          </div>
+        </div>
+      )}
+
       <style>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }

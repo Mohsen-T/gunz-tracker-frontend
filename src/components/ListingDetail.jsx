@@ -4,6 +4,7 @@ import { formatNum, shortenAddr, timeAgo } from '../utils/format';
 import { fetchMarketplaceListing, fetchMarketplaceConfig } from '../services/api';
 import * as mp from '../services/marketplace';
 import { useToast } from './Toast';
+import { useGunPrice, formatUsd } from '../hooks/useGunPrice';
 
 // Render a human-readable countdown until the given timestamp
 function countdown(expiresAt) {
@@ -22,6 +23,7 @@ function countdown(expiresAt) {
 
 export default function ListingDetail({ listing: initialListing, onClose, onSelectNode, isMobile, wallet, onConnectWallet }) {
   const toast = useToast();
+  const gunPrice = useGunPrice();
   const [listing, setListing] = useState(initialListing);
   const [config, setConfig] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -167,7 +169,12 @@ export default function ListingDetail({ listing: initialListing, onClose, onSele
           {/* Price Section */}
           <div style={{ background: '#0a180a', border: '1px solid #142014', borderRadius: 10, padding: 16, marginBottom: 16 }}>
             <div style={{ fontSize: 9, color: '#556', letterSpacing: 2, marginBottom: 4 }}>CURRENT PRICE</div>
-            <div style={{ fontSize: 28, fontWeight: 800, color: '#4ADE80', marginBottom: 4 }}>{listing.price ? `${Number(listing.price).toFixed(2)} GUN` : '—'}</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
+              <div style={{ fontSize: 28, fontWeight: 800, color: '#4ADE80' }}>{listing.price ? `${Number(listing.price).toFixed(2)} GUN` : '—'}</div>
+              {listing.price && (
+                <div style={{ fontSize: 11, color: '#556' }}>≈ {formatUsd(listing.price, gunPrice)} USD</div>
+              )}
+            </div>
             <div style={{ fontSize: 9, color: '#445', marginBottom: 12 }}>Seller fee: {sellerFeePct}% &middot; Seller receives: {listing.price ? (Number(listing.price) * (1 - sellerFeePct / 100)).toFixed(2) : '—'} GUN</div>
 
             <div style={{ display: 'flex', gap: 8 }}>
@@ -202,8 +209,18 @@ export default function ListingDetail({ listing: initialListing, onClose, onSele
             {showOfferInput && listing.status === 'Active' && wallet?.isConnected && (
               <div style={{ marginTop: 12 }}>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <input type="number" placeholder={`Min ${minOffer} GUN`} value={offerAmount} onChange={e => setOfferAmount(e.target.value)}
-                    style={{ flex: 1, background: '#060b06', border: `1px solid ${offerAmount && !offerValid ? '#EF444466' : '#1a2a1a'}`, borderRadius: 6, color: '#ddd', padding: '8px 10px', fontSize: 12, fontFamily: 'inherit', outline: 'none' }} />
+                  <div style={{ flex: 1, position: 'relative' }}>
+                    <input type="number" placeholder={`Min ${minOffer} GUN`} value={offerAmount} onChange={e => setOfferAmount(e.target.value)}
+                      style={{ width: '100%', background: '#060b06', border: `1px solid ${offerAmount && !offerValid ? '#EF444466' : '#1a2a1a'}`, borderRadius: 6, color: '#ddd', padding: '8px 10px', paddingRight: 70, fontSize: 12, fontFamily: 'inherit', outline: 'none' }} />
+                    {offerNum > 0 && (
+                      <span style={{
+                        position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                        fontSize: 9, color: '#556', pointerEvents: 'none',
+                      }}>
+                        ≈ {formatUsd(offerNum, gunPrice)}
+                      </span>
+                    )}
+                  </div>
                   <button onClick={handlePlaceOffer} disabled={!offerValid || !!txPending}
                     style={{ background: offerValid ? '#60A5FA22' : '#111', border: `1px solid ${offerValid ? '#60A5FA55' : '#1a2a1a'}`, borderRadius: 6, color: offerValid ? '#60A5FA' : '#333', padding: '8px 16px', fontSize: 11, fontWeight: 700, fontFamily: 'inherit', cursor: offerValid ? 'pointer' : 'default', letterSpacing: 1 }}>
                     {txPending === 'offer' ? '...' : 'SUBMIT'}
@@ -299,8 +316,11 @@ export default function ListingDetail({ listing: initialListing, onClose, onSele
                         {expired ? 'EXPIRED' : `${remaining} left`}
                       </div>
                     </div>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: expired ? '#556' : '#60A5FA', minWidth: 90, textAlign: 'right' }}>
-                      {Number(offer.amount).toFixed(2)} GUN
+                    <div style={{ minWidth: 90, textAlign: 'right' }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: expired ? '#556' : '#60A5FA' }}>
+                        {Number(offer.amount).toFixed(2)} GUN
+                      </div>
+                      <div style={{ fontSize: 8, color: '#445' }}>≈ {formatUsd(offer.amount, gunPrice)}</div>
                     </div>
                     {/* Seller actions: Accept + Reject */}
                     {isSeller && !expired && (
