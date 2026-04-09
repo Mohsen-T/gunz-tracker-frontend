@@ -4,6 +4,7 @@ import { formatNum, shortenAddr, timeAgo } from '../utils/format';
 import { fetchWallet, fetchWalletMarketplace, fetchTokenMarketplace } from '../services/api';
 import ListingDetail from './ListingDetail';
 import CreateListing from './CreateListing';
+import TermsModal from './TermsModal';
 
 /**
  * User profile page (OpenSea-style).
@@ -631,6 +632,7 @@ function FavoritesTab() {
 }
 
 function SettingsTab({ wallet }) {
+  const [showTos, setShowTos] = useState(false);
   return (
     <div style={{ maxWidth: 500, margin: '0 auto' }}>
       {/* Notifications settings */}
@@ -671,6 +673,16 @@ function SettingsTab({ wallet }) {
         </div>
       </div>
 
+      {/* Legal */}
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#ddd', marginBottom: 12 }}>Legal</div>
+        <button onClick={() => setShowTos(true)} style={{
+          background: '#0a140a', border: '1px solid #1a2a1a', borderRadius: 8,
+          color: '#4ADE80', padding: '10px 20px', fontSize: 11, fontWeight: 700,
+          fontFamily: 'inherit', cursor: 'pointer', letterSpacing: 1,
+        }}>VIEW TERMS OF SERVICE</button>
+      </div>
+
       {/* Danger zone */}
       <div>
         <div style={{ fontSize: 13, fontWeight: 700, color: '#EF4444', marginBottom: 12 }}>Danger Zone</div>
@@ -680,6 +692,8 @@ function SettingsTab({ wallet }) {
           fontFamily: 'inherit', cursor: 'pointer', letterSpacing: 1,
         }}>DISCONNECT WALLET</button>
       </div>
+
+      {showTos && <TermsModal onClose={() => setShowTos(false)} />}
     </div>
   );
 }

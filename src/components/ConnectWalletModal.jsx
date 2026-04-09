@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { shortenAddr } from '../utils/format';
+import TermsModal from './TermsModal';
 
 /**
  * OpenSea-style wallet connection flow:
@@ -40,6 +41,7 @@ export default function ConnectWalletModal({ onClose, onConnect, wallet, isMobil
   const [tosAgreed, setTosAgreed] = useState(false);
   const [sigPending, setSigPending] = useState(false);
   const [email, setEmail] = useState('');
+  const [showTos, setShowTos] = useState(false);
   const [showEmail, setShowEmail] = useState(false);
 
   const handleSelectProvider = async (providerId) => {
@@ -236,7 +238,7 @@ export default function ConnectWalletModal({ onClose, onConnect, wallet, isMobil
                     style={{ marginTop: 3, accentColor: '#4ADE80' }}
                   />
                   <span style={{ fontSize: 11, color: '#aaa', lineHeight: 1.6 }}>
-                    I agree to the <span style={{ color: '#4ADE80', textDecoration: 'underline', cursor: 'pointer' }}>Terms of Service</span> and{' '}
+                    I agree to the <span onClick={(e) => { e.preventDefault(); setShowTos(true); }} style={{ color: '#4ADE80', textDecoration: 'underline', cursor: 'pointer' }}>Terms of Service</span> and{' '}
                     <span style={{ color: '#4ADE80', textDecoration: 'underline', cursor: 'pointer' }}>Privacy Policy</span>
                   </span>
                 </label>
@@ -336,6 +338,9 @@ export default function ConnectWalletModal({ onClose, onConnect, wallet, isMobil
           )}
         </div>
       </div>
+
+      {/* Terms of Service modal — opened from the TOS link in step 2 */}
+      {showTos && <TermsModal onClose={() => setShowTos(false)} isMobile={isMobile} />}
 
       <style>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
